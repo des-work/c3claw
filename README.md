@@ -28,8 +28,8 @@ Operation Claw & Order is a high-density, single-page React application designed
 | **Icons**    | Lucide React                                |
 | **Bundler**  | Vite 8                                      |
 | **Linting**  | ESLint 9 + React Hooks plugin               |
-| **Hosting**  | Heroku *(planned)*                          |
-| **Backend**  | *To be developed — see Roadmap below*       |
+| **Hosting**  | Heroku                                      |
+| **Backend**  | Node.js + Express                           |
 
 ---
 
@@ -44,10 +44,15 @@ operation-claw-and-order/
 ├── postcss.config.js           # PostCSS + Tailwind + Autoprefixer
 ├── eslint.config.js            # ESLint configuration
 ├── .gitignore
+├── .env.example                # Template for environment vars
+├── Procfile                    # Heroku deployment configuration
 │
 ├── public/
 │   ├── favicon.svg             # Tab icon
 │   └── icons.svg               # Icon sprite sheet
+│
+├── server/
+│   └── index.js                # Express backend server & API routes
 │
 ├── src/
 │   ├── main.jsx                # React entry point
@@ -114,9 +119,21 @@ cd completeco
 
 # Install dependencies
 npm install
+```
 
-# Start the dev server
+### Running Locally
+
+You can run the frontend and backend in different modes:
+
+```bash
+# 1. Frontend Development Mode (localhost:5173)
 npm run dev
+
+# 2. Backend API Server Development (localhost:3001)
+npm run server
+
+# 3. Full Production Simulation (Build frontend & serve via Express on 3001)
+npm run build-start
 ```
 
 The dashboard will be live at **http://localhost:5173/**
@@ -168,8 +185,9 @@ When `VITE_API_URL` is set, the hook polls two endpoints:
 
 ### 🔜 Next Up — Backend & Deployment
 
-- [ ] **Heroku Deployment** — Configure Heroku app, add API key, and deploy the frontend
-- [ ] **Backend API Server** — Build a Node.js/Express (or Python/Flask) backend to serve `/api/status` and `/api/events`
+- [x] **Heroku Deployment** — Procfile and basic Express static serving configured
+- [x] **Backend API Server** — Node.js/Express backend structured with strict ES Modules (`"type": "module"`) and `__dirname` polyfills
+- [x] **Express Routing** — Resolved Express v5+ wildcard catching bugs by utilizing `app.use()` static fallback
 - [ ] **Database Integration** — Add PostgreSQL (Heroku Postgres) for persistent storage of team states and event logs
 - [ ] **Real-Time Data Ingestion** — Ingest live telemetry from exercise infrastructure (syslog, webhooks, or agent reporting)
 - [ ] **WebSocket Support** — Replace polling with WebSocket push for sub-second event delivery
@@ -188,9 +206,9 @@ To deploy on Heroku, the following steps are needed:
    ```bash
    heroku config:set VITE_API_URL=https://your-app.herokuapp.com
    ```
-3. **Add a `Procfile`** for serving the built frontend:
+3. **Add a `Procfile`** to boot the Express API wrapper:
    ```
-   web: npx serve dist -s -l $PORT
+   web: npm start
    ```
 4. **Add Heroku Postgres** for backend persistence:
    ```bash
@@ -207,8 +225,10 @@ To deploy on Heroku, the following steps are needed:
 | Command           | Description                              |
 | ----------------- | ---------------------------------------- |
 | `npm run dev`     | Start Vite dev server with HMR           |
+| `npm run server`  | Start Express backend with nodemon       |
 | `npm run build`   | Production build to `dist/`              |
-| `npm run preview` | Preview the production build locally     |
+| `npm run build-start`| Build frontend and serve via Express  |
+| `npm start`       | Start Express backend (production mode)  |
 | `npm run lint`    | Run ESLint across all source files       |
 
 ---
