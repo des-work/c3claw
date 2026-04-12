@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import { mockTeams, mockEvents } from '../mockData';
 
 export function useDashboardData() {
-  const [teams, setTeams] = useState(mockTeams);
-  const [events, setEvents] = useState(mockEvents);
+  const apiUrl = import.meta.env.VITE_API_URL;
+
+  const [teams, setTeams] = useState(apiUrl ? [] : mockTeams);
+  const [events, setEvents] = useState(apiUrl ? [] : mockEvents);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  const apiUrl = import.meta.env.VITE_API_URL;
 
   useEffect(() => {
     let statusInterval;
