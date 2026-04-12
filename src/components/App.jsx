@@ -28,14 +28,6 @@ const App = () => {
     );
   }
 
-  if (error) {
-    return (
-      <div className="h-screen w-screen flex items-center justify-center bg-background text-danger font-mono text-xl uppercase tracking-widest shadow-[inset_0_0_150px_rgba(255,71,87,0.2)]">
-        SYSTEM FAILURE: {error}
-      </div>
-    );
-  }
-
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col bg-background">
       {/* 1. HEADER ZONE (Fixed Top) */}

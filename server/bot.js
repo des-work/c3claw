@@ -30,7 +30,7 @@ export function startBot() {
   })
 
   client.on('messageCreate', async (message) => {
-if (message.channelId !== CHANNEL_ID) return
+    if (message.channelId !== CHANNEL_ID) return
     if (!message.content.startsWith(MESSAGE_PREFIX)) return
 
     // Expected format: [OCRT] team-id | Tool | Target | Result | Details

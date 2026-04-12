@@ -42,7 +42,8 @@ function buildTeamStatus(allEvents) {
     const lastSeenMs = now - new Date(latest.timestamp).getTime()
 
     let status = 'online'
-    if (lastSeenMs > 5 * 60 * 1000) status = 'offline'
+    if (lastSeenMs > 15 * 60 * 1000) status = 'offline'
+    else if (lastSeenMs > 5 * 60 * 1000) status = 'idle'
     else if (lastSeenMs > 60 * 1000) status = 'degraded'
 
     // Derive CIDR from team_id number (e.g. TEAM_03 → 10.0.3.0/24)
