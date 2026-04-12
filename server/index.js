@@ -17,53 +17,59 @@ app.use(cors())
 app.use(express.json())
 
 const PORT = process.env.PORT || 3001
-const HEROKU_API_KEY = process.env.HEROKU_API_KEY
-const TEAM_APP_PREFIX = process.env.TEAM_APP_PREFIX || ''
 const EVENT_API_KEY = process.env.EVENT_API_KEY || ''
 
 // Persistence: Postgres if DATABASE_URL is set, otherwise in-memory fallback
 let useDb = false
 const memoryEvents = []
 
-async function fetchHerokuApps() {
-  if (!HEROKU_API_KEY) throw new Error('HEROKU_API_KEY is not set')
-  const response = await fetch('https://api.heroku.com/apps', {
-    headers: {
-      'Authorization': `Bearer ${HEROKU_API_KEY}`,
-      'Accept': 'application/vnd.heroku+json; version=3'
-    }
-  })
-  if (!response.ok) throw new Error(`Heroku API error: ${response.status} ${response.statusText}`)
-  const apps = await response.json()
+// Derive team status from event history
+function buildTeamStatus(allEvents) {
+  const now = Date.now()
+  const byTeam = {}
 
-  // Filter to only team apps when a prefix is configured
-  if (TEAM_APP_PREFIX) {
-    return apps.filter(a => a.name.startsWith(TEAM_APP_PREFIX))
+  for (const evt of allEvents) {
+    if (!byTeam[evt.team_id]) {
+      byTeam[evt.team_id] = { events: [], blocked_count: 0 }
+    }
+    byTeam[evt.team_id].events.push(evt)
+    if (evt.result === 'BLOCKED') byTeam[evt.team_id].blocked_count++
   }
-  return apps
+
+  return Object.entries(byTeam).map(([team_id, data]) => {
+    const sorted = data.events.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    const latest = sorted[0]
+    const lastSeenMs = now - new Date(latest.timestamp).getTime()
+
+    let status = 'online'
+    if (lastSeenMs > 5 * 60 * 1000) status = 'offline'
+    else if (lastSeenMs > 60 * 1000) status = 'degraded'
+
+    // Derive CIDR from team_id number (e.g. TEAM_03 → 10.0.3.0/24)
+    const num = parseInt(team_id.replace(/\D/g, ''), 10) || 0
+
+    return {
+      team_id,
+      status,
+      phase: 1,
+      last_action: `${latest.tool} → ${latest.target} [${latest.result}]`,
+      last_seen: latest.timestamp,
+      cidr: `10.0.${num}.0/24`,
+      blocked_count: data.blocked_count,
+      event_count: data.events.length
+    }
+  }).sort((a, b) => a.team_id.localeCompare(b.team_id))
 }
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', persistence: useDb ? 'postgres' : 'memory' })
 })
 
-// Returns an array of team status objects derived from Heroku app data
+// Returns an array of team status objects derived from event history
 app.get('/api/status', async (req, res) => {
   try {
-    const apps = await fetchHerokuApps()
     const allEvents = useDb ? await getEvents(10000) : memoryEvents
-
-    const teams = apps.map((app, i) => ({
-      team_id: app.name,
-      status: app.state === 'errored' ? 'offline' : 'online',
-      phase: 1,
-      last_action: app.released_at ?? 'No releases',
-      last_seen: app.updated_at,
-      cidr: `10.0.${i + 1}.0/24`,
-      blocked_count: 0,
-      event_count: allEvents.filter(e => e.team_id === app.name).length
-    }))
-    res.json(teams)
+    res.json(buildTeamStatus(allEvents))
   } catch (err) {
     console.error('/api/status error:', err.message)
     res.status(500).json({ error: err.message })
@@ -143,8 +149,6 @@ async function start() {
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`)
     console.log(`Persistence: ${useDb ? 'PostgreSQL' : 'in-memory (events lost on restart)'}`)
-    if (!HEROKU_API_KEY) console.warn('WARNING: HEROKU_API_KEY is not set — /api/status will return errors')
-    if (!TEAM_APP_PREFIX) console.warn('WARNING: TEAM_APP_PREFIX is not set — all Heroku apps will appear as teams')
     if (!EVENT_API_KEY) console.warn('WARNING: EVENT_API_KEY is not set — POST /api/events is unauthenticated')
     startBot()
   })
