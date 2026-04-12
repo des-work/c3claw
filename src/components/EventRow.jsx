@@ -3,9 +3,10 @@ import { ChevronRight } from 'lucide-react';
 
 const EventRow = ({ event }) => {
   const getResultColor = (result) => {
-    switch (result) {
+    switch (result?.toUpperCase()) {
       case 'SUCCESS': return 'text-success drop-shadow-[0_0_2px_rgba(0,255,159,0.8)]';
       case 'FAILED': return 'text-warning drop-shadow-[0_0_2px_rgba(255,184,0,0.8)]';
+      case 'FAILURE': return 'text-danger font-black drop-shadow-[0_0_3px_rgba(255,71,87,1)]';
       case 'BLOCKED': return 'text-danger font-black drop-shadow-[0_0_3px_rgba(255,71,87,1)]';
       default: return 'text-muted';
     }

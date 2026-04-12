@@ -20,10 +20,11 @@ const TeamRow = ({ team }) => {
 
   const getStatusClasses = (status) => {
     switch (status) {
-      case 'online': return 'text-success bg-success/10 border-success/30';
+      case 'online':   return 'text-success bg-success/10 border-success/30';
       case 'degraded': return 'text-warning bg-warning/10 border-warning/30';
-      case 'offline': return 'text-danger bg-danger/10 border-danger/30';
-      default: return 'text-muted bg-surface border-muted/30';
+      case 'idle':     return 'text-warning bg-warning/10 border-warning/30';
+      case 'offline':  return 'text-danger bg-danger/10 border-danger/30';
+      default:         return 'text-muted bg-surface border-muted/30';
     }
   };
 
@@ -33,7 +34,7 @@ const TeamRow = ({ team }) => {
     <div className={`grid grid-cols-12 gap-4 items-center px-4 py-2 border-b border-surface/50 hover:bg-surface/40 transition-colors duration-200 text-sm`}>
       {/* 1. Team ID */}
       <div className="col-span-2 font-bold text-white tracking-widest text-base flex items-center gap-2">
-        <span className={`w-2 h-2 rounded-full ${team.status === 'online' ? 'bg-success animate-pulse' : team.status === 'degraded' ? 'bg-warning' : team.status === 'offline' ? 'bg-danger' : 'bg-muted'}`}></span>
+        <span className={`w-2 h-2 rounded-full ${team.status === 'online' ? 'bg-success animate-pulse' : team.status === 'degraded' ? 'bg-warning' : team.status === 'idle' ? 'bg-warning' : team.status === 'offline' ? 'bg-danger' : 'bg-muted'}`}></span>
         {team.team_id}
       </div>
 
@@ -51,7 +52,7 @@ const TeamRow = ({ team }) => {
           {[1, 2, 3].map(p => (
             <div 
               key={p} 
-              className={`h-2 w-4 rounded-sm ${p <= team.phase ? (team.status === 'online' ? 'bg-primary' : team.status === 'degraded' ? 'bg-warning' : team.status === 'offline' ? 'bg-danger' : 'bg-muted') : 'bg-surface'}`}
+              className={`h-2 w-4 rounded-sm ${p <= team.phase ? (team.status === 'online' ? 'bg-primary' : team.status === 'degraded' ? 'bg-warning' : team.status === 'idle' ? 'bg-warning' : team.status === 'offline' ? 'bg-danger' : 'bg-muted') : 'bg-surface'}`}
             ></div>
           ))}
         </div>
