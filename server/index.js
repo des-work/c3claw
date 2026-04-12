@@ -4,6 +4,7 @@ import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { initDb, insertEvent, getEvents } from './db.js'
+import { startBot } from './bot.js'
 
 dotenv.config()
 
@@ -145,6 +146,7 @@ async function start() {
     if (!HEROKU_API_KEY) console.warn('WARNING: HEROKU_API_KEY is not set — /api/status will return errors')
     if (!TEAM_APP_PREFIX) console.warn('WARNING: TEAM_APP_PREFIX is not set — all Heroku apps will appear as teams')
     if (!EVENT_API_KEY) console.warn('WARNING: EVENT_API_KEY is not set — POST /api/events is unauthenticated')
+    startBot()
   })
 }
 
