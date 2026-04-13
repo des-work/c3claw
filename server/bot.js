@@ -4,16 +4,20 @@ const MESSAGE_PREFIX = '[OCRT]'
 
 export function startBot() {
   const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN
-  const CHANNEL_ID = process.env.DISCORD_CHANNEL_ID
   const PORT = process.env.PORT || 3001
   const EVENT_API_KEY = process.env.EVENT_API_KEY || ''
 
+  // All 5 class telemetry channels
+  const ALLOWED_CHANNELS = new Set([
+    '1492978716815655137', // ocrt-telemetry-1
+    '1493081326130040863', // ocrt-telemetry-2
+    '1493081407726161970', // ocrt-telemetry-3
+    '1493081431386099862', // ocrt-telemetry-4
+    '1493081451275485275', // ocrt-telemetry-5
+  ])
+
   if (!BOT_TOKEN) {
     console.warn('WARNING: DISCORD_BOT_TOKEN is not set — Discord bot will not start')
-    return
-  }
-  if (!CHANNEL_ID) {
-    console.warn('WARNING: DISCORD_CHANNEL_ID is not set — Discord bot will not start')
     return
   }
 
@@ -30,7 +34,7 @@ export function startBot() {
   })
 
   client.on('messageCreate', async (message) => {
-    if (message.channelId !== CHANNEL_ID) return
+    if (!ALLOWED_CHANNELS.has(message.channelId)) return
     if (!message.content.startsWith(MESSAGE_PREFIX)) return
 
     // Expected format: [OCRT] team-id | Tool | Target | Result | Details
