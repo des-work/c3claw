@@ -1,25 +1,43 @@
 import React, { useState, useMemo } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Filter } from 'lucide-react';
 import TeamRow from './TeamRow';
 
 const TeamList = ({ teams }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedClass, setSelectedClass] = useState('ALL');
 
-  // 5. Performance: Use useMemo to compute filtered teams
+  // Auto-detect classes from team IDs (e.g. C1-TEAM_01 → C1)
+  const detectedClasses = useMemo(() => {
+    if (!teams) return [];
+    const classes = new Set();
+    teams.forEach(team => {
+      const match = team.team_id.match(/^(C\d+)-/i);
+      if (match) classes.add(match[1].toUpperCase());
+    });
+    return ['ALL', ...Array.from(classes).sort()];
+  }, [teams]);
+
   const filteredTeams = useMemo(() => {
     if (!teams) return [];
-    if (!searchTerm) return teams;
-    
-    // 3. Filter logic: case-insensitive match on team_id
-    const lowerSearch = searchTerm.toLowerCase();
-    return teams.filter(val => val.team_id.toLowerCase().includes(lowerSearch));
-  }, [teams, searchTerm]);
+    return teams.filter(team => {
+      const matchesSearch = !searchTerm ||
+        team.team_id.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesClass = selectedClass === 'ALL' ||
+        team.team_id.toUpperCase().startsWith(selectedClass + '-');
+      return matchesSearch && matchesClass;
+    });
+  }, [teams, searchTerm, selectedClass]);
+
+  const hasClassPrefixes = detectedClasses.length > 1;
 
   return (
     <div className="flex flex-col h-full overflow-hidden relative">
-      {/* 1. Search Bar */}
-      <div className="p-3 bg-surface/20 shrink-0 border-b border-surface/50">
-        <div className="relative">
+
+      {/* Search + Class Filter Bar */}
+      <div className="p-3 bg-surface/20 shrink-0 border-b border-surface/50 flex gap-3">
+
+        {/* Search */}
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
           <input
             type="text"
@@ -29,6 +47,28 @@ const TeamList = ({ teams }) => {
             className="w-full bg-[#0a0f1e] border border-surface/80 rounded block pl-10 pr-4 py-2 text-sm text-gray-200 placeholder-muted outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all font-mono shadow-inner"
           />
         </div>
+
+        {/* Class Filter — only shows when class prefixes are detected */}
+        {hasClassPrefixes && (
+          <div className="relative flex items-center gap-2 shrink-0">
+            <Filter className="w-4 h-4 text-muted" />
+            <div className="flex gap-1">
+              {detectedClasses.map(cls => (
+                <button
+                  key={cls}
+                  onClick={() => setSelectedClass(cls)}
+                  className={`px-3 py-1.5 text-xs font-mono font-bold uppercase tracking-wider rounded border transition-all duration-150
+                    ${selectedClass === cls
+                      ? 'bg-primary/20 border-primary text-primary shadow-[0_0_8px_rgba(0,200,255,0.3)]'
+                      : 'bg-surface/40 border-surface/60 text-muted hover:border-primary/40 hover:text-gray-300'
+                    }`}
+                >
+                  {cls === 'ALL' ? 'All Classes' : cls}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Table Header Ribbon */}
@@ -40,19 +80,21 @@ const TeamList = ({ teams }) => {
         <div className="col-span-2 text-right">Telemetry Sync</div>
       </div>
 
-      {/* High-Density Scrolling View */}
+      {/* Team Rows */}
       <div className="flex-1 overflow-y-auto bg-background/50">
         {filteredTeams.length > 0 ? (
-          // Render only filtered teams
           filteredTeams.map((team, index) => (
             <TeamRow key={team.team_id} team={team} index={index} />
           ))
         ) : teams && teams.length > 0 ? (
-          // 4. Render "No teams found" message if search yields zero results
           <div className="flex flex-col items-center justify-center h-[200px] text-muted font-mono text-sm tracking-[0.2em] bg-surface/10 rounded m-4 border border-surface/40 border-dashed">
             <Search className="w-6 h-6 mb-3 opacity-30" />
             <div className="mb-1 opacity-80 font-bold">NO MATCHING DESIGNATIONS</div>
-            <div className="opacity-50">No teams found matching "{searchTerm}"</div>
+            <div className="opacity-50">
+              {selectedClass !== 'ALL'
+                ? `No teams found in ${selectedClass}`
+                : `No teams found matching "${searchTerm}"`}
+            </div>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-[200px] text-muted font-mono text-sm tracking-[0.2em]">
