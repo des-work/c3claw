@@ -8,13 +8,17 @@ export function startBot() {
   const EVENT_API_KEY = process.env.EVENT_API_KEY || ''
 
   // All 5 class telemetry channels
-  const ALLOWED_CHANNELS = new Set([
-    '1492978716815655137', // ocrt-telemetry-1
-    '1493081326130040863', // ocrt-telemetry-2
-    '1493081407726161970', // ocrt-telemetry-3
-    '1493081431386099862', // ocrt-telemetry-4
-    '1493081451275485275', // ocrt-telemetry-5
-  ])
+  const ALLOWED_CHANNELS = new Set(
+    process.env.ALLOWED_CHANNELS
+      ? process.env.ALLOWED_CHANNELS.split(',').map(id => id.trim())
+      : [
+          '1492978716815655137',
+          '1493081326130040863',
+          '1493081407726161970',
+          '1493081431386099862',
+          '1493081451275485275',
+        ]
+  )
 
   if (!BOT_TOKEN) {
     console.warn('WARNING: DISCORD_BOT_TOKEN is not set — Discord bot will not start')
