@@ -5,6 +5,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { initDb, insertEvent, getEvents } from './db.js'
 import { startBot } from './bot.js'
+import { seedEvents } from './seed.js'
 
 dotenv.config()
 
@@ -129,6 +130,21 @@ app.post('/api/events', async (req, res) => {
     console.error('/api/events POST error:', err.message)
     res.status(500).json({ error: err.message })
   }
+})
+
+// ── DEV ONLY ──────────────────────────────────────────────────────────────────
+// POST /api/seed  — loads mock events into the in-memory store for UI testing.
+// Blocked in production so it can never be accidentally deployed live.
+// ──────────────────────────────────────────────────────────────────────────────
+app.post('/api/seed', (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ error: 'Seed endpoint is disabled in production' })
+  }
+  for (const event of seedEvents) {
+    memoryEvents.push(event)
+  }
+  console.log(`[seed] Loaded ${seedEvents.length} mock events into memory store`)
+  res.json({ seeded: seedEvents.length })
 })
 
 // Serve the built frontend
