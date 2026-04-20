@@ -6,19 +6,14 @@ const TeamList = ({ teams }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('ALL');
 
-  // Auto-detect grouping prefixes from team IDs.
-  // Supports two formats:
-  //   • Legacy class prefix:   C4-Team_01  → "C4"
-  //   • Professor prefix:      NES_01      → "NES",  FLO_02 → "FLO"
-  //     (2–5 uppercase letters before underscore, excluding reserved names TEAM/DEV)
+  // Auto-detect professor prefixes from team IDs (e.g. NES_01 → "NES", FLO_02 → "FLO")
+  // Matches 2–5 uppercase letters before an underscore followed by digits.
+  // Reserved names TEAM and DEV are excluded so legacy teams don't show as filter buttons.
   const RESERVED_PREFIXES = ['TEAM', 'DEV'];
   const detectedClasses = useMemo(() => {
     if (!teams) return [];
     const classes = new Set();
     teams.forEach(team => {
-      const classMatch = team.team_id.match(/^(C\d+)-/i);
-      if (classMatch) classes.add(classMatch[1].toUpperCase());
-
       const profMatch = team.team_id.match(/^([A-Z]{2,5})_\d+$/i);
       if (profMatch && !RESERVED_PREFIXES.includes(profMatch[1].toUpperCase())) {
         classes.add(profMatch[1].toUpperCase());
@@ -33,8 +28,7 @@ const TeamList = ({ teams }) => {
       const matchesSearch = !searchTerm ||
         team.team_id.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesClass = selectedClass === 'ALL' ||
-        team.team_id.toUpperCase().startsWith(selectedClass + '-') ||  // C4- style
-        team.team_id.toUpperCase().startsWith(selectedClass + '_');     // NES_ / FLO_ style
+        team.team_id.toUpperCase().startsWith(selectedClass + '_');
       return matchesSearch && matchesClass;
     });
   }, [teams, searchTerm, selectedClass]);
