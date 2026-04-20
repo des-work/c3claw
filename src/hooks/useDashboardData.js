@@ -31,7 +31,7 @@ export function useDashboardData() {
       const results = ['SUCCESS', 'FAILED', 'BLOCKED'];
       eventsInterval = setInterval(() => {
         setEvents(prev => {
-          const teamIds = ['TEAM_01','TEAM_02','TEAM_03','TEAM_05','TEAM_07','TEAM_08','TEAM_09','TEAM_11','TEAM_12','NES_01','NES_02','NES_03','NES_05','NES_06','FLO_01','FLO_02','FLO_03','FLO_04','FLO_06'];
+          const teamIds = ['TEAM_01','TEAM_02','TEAM_03','TEAM_05','TEAM_07','TEAM_08','TEAM_09','TEAM_11','TEAM_12','Nestler_01','Nestler_02','Nestler_03','Brown_01','Brown_02','Brown_03','Flores_01','Flores_02','Flores_03','McIntyre_01','McIntyre_02','McIntyre_03'];
           const tool = tools[Math.floor(Math.random() * tools.length)];
           const result = results[Math.floor(Math.random() * results.length)];
           const teamId = teamIds[Math.floor(Math.random() * teamIds.length)];

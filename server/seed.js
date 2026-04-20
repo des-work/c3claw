@@ -94,45 +94,52 @@ const tx = [
   evt('TEAM_T2', 'Nmap',       '10.3.2.0/24', 'SUCCESS', 'Services enumerated',      13),
 ]
 
-// ─── NES teams ───────────────────────────────────────────────────────────────
-const nes = [
-  evt('NES_01', 'Nmap',       '10.0.1.0/24', 'SUCCESS', '12 hosts discovered',             2),
-  evt('NES_01', 'Gobuster',   '10.0.1.5',    'SUCCESS', '/admin /backup found',             5),
+// ─── Nestler teams ────────────────────────────────────────────────────────────
+const nestler = [
+  evt('Nestler_01', 'Nmap',       '10.0.1.0/24', 'SUCCESS', '12 hosts discovered',              2),
+  evt('Nestler_01', 'Gobuster',   '10.0.1.5',    'SUCCESS', '/admin /backup found',              5),
 
-  evt('NES_02', 'Nmap',       '10.0.2.0/24', 'SUCCESS', 'Ports 22,80,443 open',            1),
-  evt('NES_02', 'Hydra',      '10.0.2.10',   'BLOCKED', 'Account locked after 5 attempts', 4),
+  evt('Nestler_02', 'Nmap',       '10.0.2.0/24', 'SUCCESS', 'Ports 22,80,443 open',             1),
+  evt('Nestler_02', 'Hydra',      '10.0.2.10',   'BLOCKED', 'Account locked after 5 attempts',  4),
 
-  evt('NES_03', 'Hydra',      '10.0.3.5',    'BLOCKED', 'Rate limit exceeded',              8),
-  evt('NES_03', 'Nmap',       '10.0.3.0/24', 'SUCCESS', 'Host sweep complete',             10),
+  evt('Nestler_03', 'Hydra',      '10.0.3.5',    'BLOCKED', 'Rate limit exceeded',               8),
+  evt('Nestler_03', 'Nmap',       '10.0.3.0/24', 'SUCCESS', 'Host sweep complete',              10),
 
-  evt('NES_04', 'Nmap',       '10.0.4.0/24', 'FAILED',  'Network unreachable',             35),
-
-  evt('NES_05', 'Nmap',       '10.0.5.0/24', 'SUCCESS', 'Initial recon done',               3),
-  evt('NES_05', 'Metasploit', '10.0.5.8',    'SUCCESS', 'Shell obtained',                   6),
-  evt('NES_05', 'Mimikatz',   'DC-01',        'SUCCESS', 'Hashes extracted',                 9),
-
-  evt('NES_06', 'Nmap',       '10.0.6.0/24', 'SUCCESS', 'Subnet mapped',                    14),
+  evt('Nestler_04', 'Nmap',       '10.0.4.0/24', 'FAILED',  'Network unreachable',              35),
 ]
 
-// ─── FLO teams ───────────────────────────────────────────────────────────────
-const flo = [
-  evt('FLO_01', 'Nmap',        '10.0.1.0/24', 'SUCCESS', 'Host discovery complete',         1),
-  evt('FLO_01', 'Gobuster',    '10.0.1.10',   'SUCCESS', '/portal /api found',              4),
+// ─── Brown teams ──────────────────────────────────────────────────────────────
+const brown = [
+  evt('Brown_01', 'Nmap',        '10.0.1.0/24', 'SUCCESS', 'Host discovery complete',           1),
+  evt('Brown_01', 'Gobuster',    '10.0.1.10',   'SUCCESS', '/portal /api found',                4),
 
-  evt('FLO_02', 'SQLMap',      'STORE-FRONT',  'BLOCKED', 'WAF triggered',                   2),
-  evt('FLO_02', 'Nmap',        '10.0.2.0/24', 'SUCCESS', 'Port scan complete',              7),
-  evt('FLO_02', 'Metasploit',  '10.0.2.15',   'FAILED',  'Exploit mismatch',               11),
+  evt('Brown_02', 'Metasploit',  '10.0.2.8',    'SUCCESS', 'Shell obtained',                    2),
+  evt('Brown_02', 'Nmap',        '10.0.2.0/24', 'SUCCESS', 'Port scan complete',                6),
 
-  evt('FLO_03', 'Ping',        '10.0.3.1',    'SUCCESS', 'Host is up',                      12),
-  evt('FLO_03', 'Hydra',       '10.0.3.5',    'BLOCKED', 'IP banned mid-attack',            16),
+  evt('Brown_03', 'Ping',        '10.0.3.1',    'SUCCESS', 'Host is up',                       10),
+  evt('Brown_03', 'Hydra',       '10.0.3.5',    'BLOCKED', 'IP banned mid-attack',             14),
+]
 
-  evt('FLO_04', 'Proxychains', 'DMZ',          'SUCCESS', 'Dynamic port forwarding enabled',  1),
-  evt('FLO_04', 'Metasploit',  '10.0.4.9',    'SUCCESS', 'Lateral movement via SMB',         3),
+// ─── Flores teams ─────────────────────────────────────────────────────────────
+const flores = [
+  evt('Flores_01', 'SQLMap',      'STORE-FRONT',  'BLOCKED', 'WAF triggered',                    2),
+  evt('Flores_01', 'Nmap',        '10.0.1.0/24', 'SUCCESS', 'Port scan complete',                7),
 
-  evt('FLO_05', 'Meterpreter', 'WIN-05',       'FAILED',  'Session died',                    28),
+  evt('Flores_02', 'Proxychains', 'DMZ',          'SUCCESS', 'Dynamic port forwarding enabled',   1),
+  evt('Flores_02', 'Metasploit',  '10.0.2.9',    'SUCCESS', 'Lateral movement via SMB',          3),
 
-  evt('FLO_06', 'Amass',       'corp.local',   'SUCCESS', 'Found 9 subdomains',               6),
-  evt('FLO_06', 'Nmap',        '10.0.6.0/24', 'SUCCESS', 'Services enumerated',             10),
+  evt('Flores_03', 'Meterpreter', 'WIN-05',       'FAILED',  'Session died',                     28),
+]
+
+// ─── McIntyre teams ───────────────────────────────────────────────────────────
+const mcintyre = [
+  evt('McIntyre_01', 'Amass',     'corp.local',   'SUCCESS', 'Found 9 subdomains',                6),
+  evt('McIntyre_01', 'Nmap',      '10.0.1.0/24', 'SUCCESS', 'Services enumerated',              10),
+
+  evt('McIntyre_02', 'Nmap',      '10.0.2.0/24', 'SUCCESS', 'Subnet mapped',                    14),
+
+  evt('McIntyre_03', 'Gobuster',  '10.0.3.5',    'SUCCESS', '/admin found',                      3),
+  evt('McIntyre_03', 'Hydra',     '10.0.3.5',    'BLOCKED', 'Rate limit hit',                    8),
 ]
 
 export const seedEvents = [
@@ -142,6 +149,8 @@ export const seedEvents = [
   ...fx,
   ...rx,
   ...tx,
-  ...nes,
-  ...flo,
+  ...nestler,
+  ...brown,
+  ...flores,
+  ...mcintyre,
 ]

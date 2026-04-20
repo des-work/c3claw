@@ -2,24 +2,32 @@ import React, { useState, useMemo } from 'react';
 import { Search, Filter } from 'lucide-react';
 import TeamRow from './TeamRow';
 
+// Extracts the professor prefix from a team_id, tolerating common formatting issues:
+//   Nestler_01       → "Nestler"   (standard)
+//   Nestler_Team4    → "Nestler"   (team label instead of number)
+//   Nestler4910_Team4→ "Nestler"   (course number appended to name)
+//   MCintrye-7       → "MCintrye"  (dash instead of underscore)
+// Returns null for reserved prefixes (TEAM, DEV, TEST) and unrecognized formats.
+const RESERVED_PREFIXES = ['TEAM', 'DEV', 'TEST'];
+function extractProf(teamId) {
+  const match = teamId.match(/^([A-Za-z]{3,})\d*[_-]/);
+  if (!match) return null;
+  if (RESERVED_PREFIXES.includes(match[1].toUpperCase())) return null;
+  return match[1];
+}
+
 const TeamList = ({ teams }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('ALL');
 
-  // Auto-detect professor prefixes from team IDs (e.g. NES_01 → "NES", FLO_02 → "FLO")
-  // Matches 2–5 uppercase letters before an underscore followed by digits.
-  // Reserved names TEAM and DEV are excluded so legacy teams don't show as filter buttons.
-  const RESERVED_PREFIXES = ['TEAM', 'DEV'];
   const detectedClasses = useMemo(() => {
     if (!teams) return [];
-    const classes = new Set();
+    const seen = new Map(); // lowercase → original casing for display
     teams.forEach(team => {
-      const profMatch = team.team_id.match(/^([A-Z]{2,5})_\d+$/i);
-      if (profMatch && !RESERVED_PREFIXES.includes(profMatch[1].toUpperCase())) {
-        classes.add(profMatch[1].toUpperCase());
-      }
+      const prof = extractProf(team.team_id);
+      if (prof) seen.set(prof.toLowerCase(), prof);
     });
-    return ['ALL', ...Array.from(classes).sort()];
+    return ['ALL', ...Array.from(seen.values()).sort()];
   }, [teams]);
 
   const filteredTeams = useMemo(() => {
@@ -28,7 +36,7 @@ const TeamList = ({ teams }) => {
       const matchesSearch = !searchTerm ||
         team.team_id.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesClass = selectedClass === 'ALL' ||
-        team.team_id.toUpperCase().startsWith(selectedClass + '_');
+        extractProf(team.team_id)?.toLowerCase() === selectedClass.toLowerCase();
       return matchesSearch && matchesClass;
     });
   }, [teams, searchTerm, selectedClass]);
@@ -68,7 +76,7 @@ const TeamList = ({ teams }) => {
                       : 'bg-surface/40 border-surface/60 text-muted hover:border-primary/40 hover:text-gray-300'
                     }`}
                 >
-                  {cls === 'ALL' ? 'All Classes' : cls}
+                  {cls === 'ALL' ? 'All' : cls}
                 </button>
               ))}
             </div>
