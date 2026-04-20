@@ -20,15 +20,10 @@ const TeamList = ({ teams }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('ALL');
 
-  const detectedClasses = useMemo(() => {
-    if (!teams) return [];
-    const seen = new Map(); // lowercase → original casing for display
-    teams.forEach(team => {
-      const prof = extractProf(team.team_id);
-      if (prof) seen.set(prof.toLowerCase(), prof);
-    });
-    return ['ALL', ...Array.from(seen.values()).sort()];
-  }, [teams]);
+  // Fixed professor list — tabs always show even before a professor's teams have data.
+  // extractProf still handles grouping wonky team names under the right professor.
+  const PROFESSORS = ['Brown', 'Flores', 'McIntyre', 'Nestler'];
+  const detectedClasses = ['ALL', ...PROFESSORS];
 
   const filteredTeams = useMemo(() => {
     if (!teams) return [];
