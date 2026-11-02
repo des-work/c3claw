@@ -3,7 +3,8 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { initDb, insertEvent, getEvents, upsertMachineStatus, getMachineStatuses } from './db.js'
+import { initDb, insertEvent, getEvents, getTeamStatuses, getDiscordRejectionCount, upsertMachineStatus, getMachineStatuses } from './db.js'
+import { parseEvent, statusFromSummary, updateSummary } from './events.js'
 import { startBot } from './bot.js'
 import { seedEvents } from './seed.js'
 import { attachTopology, loadTopology, MACHINE_STATES, MACHINE_ZONES } from './topology.js'
@@ -25,57 +26,25 @@ const inventory = loadTopology()
 // Persistence: Postgres if DATABASE_URL is set, otherwise in-memory fallback
 let useDb = false
 const memoryEvents = []
+const memorySources = new Map()
+const memorySummary = new Map()
 const memoryMachines = new Map()
 
-// Derive team status from event history
-function buildTeamStatus(allEvents) {
-  const now = Date.now()
-  const byTeam = {}
-
-  for (const evt of allEvents) {
-    if (!byTeam[evt.team_id]) {
-      byTeam[evt.team_id] = { events: [], blocked_count: 0 }
-    }
-    byTeam[evt.team_id].events.push(evt)
-    if (evt.result === 'BLOCKED') byTeam[evt.team_id].blocked_count++
+app.get('/api/health', async (req, res) => {
+  try {
+    res.json({ status: 'ok', persistence: useDb ? 'postgres' : 'memory',
+      discord_rejections: useDb ? await getDiscordRejectionCount() : 0 })
+  } catch (error) {
+    res.status(503).json({ status: 'degraded', error: error.message })
   }
-
-  return Object.entries(byTeam).map(([team_id, data]) => {
-    const sorted = data.events.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-    const latest = sorted[0]
-    const lastSeenMs = now - new Date(latest.timestamp).getTime()
-
-    let status = 'online'
-    if (lastSeenMs > 15 * 60 * 1000) status = 'offline'
-    else if (lastSeenMs > 5 * 60 * 1000) status = 'idle'
-    else if (lastSeenMs > 60 * 1000) status = 'degraded'
-
-    // Derive CIDR from team_id number (e.g. TEAM_03 → 10.0.3.0/24)
-    const num = parseInt(team_id.replace(/\D/g, ''), 10) || 0
-
-    return {
-      team_id,
-      status,
-      phase: 1,
-      last_action: `${latest.tool} → ${latest.target} [${latest.result}]`,
-      last_seen: latest.timestamp,
-      cidr: `10.0.${num}.0/24`,
-      blocked_count: data.blocked_count,
-      event_count: data.events.length
-    }
-  }).sort((a, b) => a.team_id.localeCompare(b.team_id))
-}
-
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', persistence: useDb ? 'postgres' : 'memory' })
 })
 
 // Returns an array of team status objects derived from event history
 app.get('/api/status', async (req, res) => {
   try {
-    const allEvents = useDb ? await getEvents(10000) : memoryEvents
+    const summaries = useDb ? await getTeamStatuses() : [...memorySummary.values()]
     const observations = useDb ? await getMachineStatuses() : [...memoryMachines.values()]
-    res.json(attachTopology(buildTeamStatus(allEvents), inventory, observations))
+    res.json(attachTopology(summaries.map(summary => statusFromSummary(summary)), inventory, observations))
   } catch (err) {
     console.error('/api/status error:', err.message)
     res.status(500).json({ error: err.message })
@@ -119,11 +88,13 @@ app.post('/api/machines/heartbeat', async (req, res) => {
 // Returns the most recent events
 app.get('/api/events', async (req, res) => {
   try {
+    const requested = Number(req.query.limit)
+    const limit = Number.isInteger(requested) && requested >= 1 ? Math.min(requested, 100) : 100
     if (useDb) {
-      const events = await getEvents(100)
+      const events = await getEvents(limit)
       res.json(events)
     } else {
-      res.json(memoryEvents.slice(-100))
+      res.json(memoryEvents.slice(-limit))
     }
   } catch (err) {
     console.error('/api/events error:', err.message)
@@ -133,6 +104,9 @@ app.get('/api/events', async (req, res) => {
 
 // Submit a new event — requires EVENT_API_KEY when configured
 app.post('/api/events', async (req, res) => {
+  if (process.env.NODE_ENV === 'production' && !EVENT_API_KEY) {
+    return res.status(503).json({ error: 'EVENT_API_KEY is required in production' })
+  }
   // Auth check: if EVENT_API_KEY is set, require it in the Authorization header
   if (EVENT_API_KEY) {
     const authHeader = req.headers.authorization || ''
@@ -142,30 +116,33 @@ app.post('/api/events', async (req, res) => {
     }
   }
 
-  const { team_id, tool, target, result, details } = req.body
-  if (!team_id || !tool || !target || !result) {
-    return res.status(400).json({ error: 'team_id, tool, target, and result are required' })
-  }
-
-  const event = {
-    id: `evt_${Date.now()}`,
-    team_id,
-    timestamp: new Date().toISOString(),
-    tool,
-    target,
-    result,
-    details: details ?? ''
-  }
+  const event = parseEvent(req.body)
+  if (!event) return res.status(400).json({ error: 'Invalid event fields' })
 
   try {
     if (useDb) {
-      await insertEvent(event)
+      const saved = await insertEvent(event)
+      return res.status(saved.duplicate ? 200 : 201).json({ ...saved.event, duplicate: saved.duplicate })
     } else {
+      if (event.source_id && memorySources.has(event.source_id)) {
+        const previous = memorySources.get(event.source_id)
+        if (['team_id', 'tool', 'target', 'result', 'details'].some(field => previous[field] !== event[field])) {
+          return res.status(409).json({ error: 'source_id already used for different telemetry' })
+        }
+        return res.status(200).json({ ...previous, duplicate: true })
+      }
       memoryEvents.push(event)
+      memorySummary.set(event.team_id, updateSummary(memorySummary.get(event.team_id), event))
+      if (event.source_id) memorySources.set(event.source_id, event)
+      if (memoryEvents.length > 1000) {
+        const removed = memoryEvents.shift()
+        if (removed.source_id) memorySources.delete(removed.source_id)
+      }
     }
-    res.status(201).json(event)
+    res.status(201).json({ ...event, duplicate: false })
   } catch (err) {
     console.error('/api/events POST error:', err.message)
+    if (err.code === 'SOURCE_CONFLICT') return res.status(409).json({ error: err.message })
     res.status(500).json({ error: err.message })
   }
 })
@@ -180,6 +157,7 @@ app.post('/api/seed', (req, res) => {
   }
   for (const event of seedEvents) {
     memoryEvents.push(event)
+    memorySummary.set(event.team_id, updateSummary(memorySummary.get(event.team_id), event))
   }
   console.log(`[seed] Loaded ${seedEvents.length} mock events into memory store`)
   res.json({ seeded: seedEvents.length })
@@ -197,8 +175,12 @@ async function start() {
   try {
     useDb = await initDb()
   } catch (err) {
-    console.warn('PostgreSQL unavailable, using in-memory event store:', err.message)
-    useDb = false
+    console.error('PostgreSQL initialization failed:', err)
+    if (process.env.NODE_ENV === 'production' || process.env.DATABASE_URL) throw err
+  }
+
+  if (process.env.NODE_ENV === 'production' && (!useDb || !EVENT_API_KEY)) {
+    throw new Error('Production requires DATABASE_URL and EVENT_API_KEY')
   }
 
   app.listen(PORT, () => {

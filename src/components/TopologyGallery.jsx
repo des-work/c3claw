@@ -7,13 +7,12 @@ const ZONES = [
   { id: 'dmz', label: 'DMZ' },
   { id: 'lan', label: 'LAN' },
 ]
-const CLASSES = ['ALL', 'Brown', 'Flores', 'McIntyre', 'Nestler']
 const STATES = ['online', 'degraded', 'offline', 'unknown']
 
 function professorOf(teamId = '') {
   const match = teamId.match(/^([A-Za-z]{3,})\d*[_-]/)
   if (!match || ['TEAM', 'DEV', 'TEST'].includes(match[1].toUpperCase())) return null
-  return match[1].toLowerCase()
+  return match[1]
 }
 
 function Machine({ machine }) {
@@ -88,9 +87,11 @@ function TopologyCard({ team }) {
 export default function TopologyGallery({ teams = [], isMock = false }) {
   const [search, setSearch] = useState('')
   const [selectedClass, setSelectedClass] = useState('ALL')
+  const classes = useMemo(() => ['ALL', ...[...new Set(teams.map(team => team.class_id || professorOf(team.team_id))
+    .filter(Boolean))].sort((a, b) => a.localeCompare(b))], [teams])
   const filtered = useMemo(() => teams.filter(team =>
     team.team_id.toLowerCase().includes(search.toLowerCase()) &&
-    (selectedClass === 'ALL' || professorOf(team.team_id) === selectedClass.toLowerCase())
+    (selectedClass === 'ALL' || (team.class_id || professorOf(team.team_id))?.toLowerCase() === selectedClass.toLowerCase())
   ), [teams, search, selectedClass])
   const machineCount = teams.reduce((total, team) => total + (team.machines?.length || 0), 0)
 
@@ -109,7 +110,7 @@ export default function TopologyGallery({ teams = [], isMock = false }) {
             <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search teams" />
           </label>
           <div className="topology-gallery__filters" aria-label="Filter by class">
-            {CLASSES.map(name => <button key={name} type="button" aria-pressed={selectedClass === name}
+            {classes.map(name => <button key={name} type="button" aria-pressed={selectedClass === name}
               onClick={() => setSelectedClass(name)}>{name}</button>)}
           </div>
         </div>

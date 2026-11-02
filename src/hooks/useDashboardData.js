@@ -7,11 +7,15 @@ export function useDashboardData() {
   const [teams, setTeams] = useState(apiUrl ? [] : mockTeams);
   const [events, setEvents] = useState(apiUrl ? [] : mockEvents);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [statusError, setStatusError] = useState(null);
+  const [eventsError, setEventsError] = useState(null);
 
   useEffect(() => {
     let statusInterval;
     let eventsInterval;
+    let active = true;
+    let statusRequest = null;
+    let eventsRequest = null;
 
     if (!apiUrl) {
       // Use Mock Data
@@ -49,39 +53,75 @@ export function useDashboardData() {
       }, 4000);
       
     } else {
-      // API Polling
       const fetchStatus = async () => {
+        if (!active || statusRequest) return;
+        if (document.hidden) {
+          statusInterval = setTimeout(fetchStatus, 15000);
+          return;
+        }
+        const controller = new AbortController();
+        statusRequest = controller;
         try {
-          const response = await fetch(`${apiUrl}/api/status`);
+          const response = await fetch(`${apiUrl}/api/status`, { signal: controller.signal, cache: 'no-store' });
           if (!response.ok) throw new Error('Failed to fetch status');
           const data = await response.json();
-          setTeams(data);
-          setError(null);
+          if (active) {
+            setTeams(data);
+            setStatusError(null);
+          }
         } catch (err) {
-          setError(err.message);
+          if (active && err.name !== 'AbortError') setStatusError(err.message);
         } finally {
-          setLoading(false);
+          statusRequest = null;
+          if (active) {
+            setLoading(false);
+            statusInterval = setTimeout(fetchStatus, 15000);
+          }
         }
       };
 
       const fetchEvents = async () => {
+        if (!active || eventsRequest) return;
+        if (document.hidden) {
+          eventsInterval = setTimeout(fetchEvents, 4000);
+          return;
+        }
+        const controller = new AbortController();
+        eventsRequest = controller;
         try {
-          const response = await fetch(`${apiUrl}/api/events`);
+          const response = await fetch(`${apiUrl}/api/events?limit=20`, { signal: controller.signal, cache: 'no-store' });
           if (!response.ok) throw new Error('Failed to fetch events');
           const data = await response.json();
-          setEvents(data);
+          if (active) {
+            setEvents(data);
+            setEventsError(null);
+          }
         } catch (err) {
-          console.error("Error fetching events:", err);
+          if (active && err.name !== 'AbortError') setEventsError(err.message);
+        } finally {
+          eventsRequest = null;
+          if (active) eventsInterval = setTimeout(fetchEvents, 4000);
         }
       };
 
-      // Initial fetch
       fetchStatus();
       fetchEvents();
-
-      // Poll intervals
-      statusInterval = setInterval(fetchStatus, 15000);
-      eventsInterval = setInterval(fetchEvents, 4000);
+      const onVisible = () => {
+        if (document.hidden) return;
+        clearTimeout(statusInterval);
+        clearTimeout(eventsInterval);
+        fetchStatus();
+        fetchEvents();
+      };
+      document.addEventListener('visibilitychange', onVisible);
+      return () => {
+        active = false;
+        clearTimeout(statusInterval);
+        clearTimeout(eventsInterval);
+        statusRequest?.abort();
+        eventsRequest?.abort();
+        document.removeEventListener('visibilitychange', onVisible);
+      };
     }
 
     return () => {
@@ -90,5 +130,5 @@ export function useDashboardData() {
     };
   }, [apiUrl]);
 
-  return { teams, events, loading, error, isMock: !apiUrl };
+  return { teams, events, loading, error: statusError || eventsError, isMock: !apiUrl };
 }

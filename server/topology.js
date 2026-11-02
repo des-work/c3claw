@@ -16,6 +16,7 @@ export function loadTopology(file = process.env.TOPOLOGY_FILE, inline = process.
     }
     return {
       team_id: team.team_id.trim(),
+      class_id: typeof team.class_id === 'string' && team.class_id.trim() ? team.class_id.trim() : null,
       cidr: typeof team.cidr === 'string' ? team.cidr : null,
       machines: team.machines.map(machine => {
         if (typeof machine.machine_id !== 'string' || !machine.machine_id.trim() ||
@@ -51,6 +52,7 @@ export function attachTopology(teams, inventory, observations, now = Date.now())
       last_seen: null, cidr: null, blocked_count: 0, event_count: 0, machines: [],
     }
     team.cidr ||= entry.cidr
+    team.class_id = entry.class_id || team.class_id || null
     team.machines = entry.machines.map(machine => ({ ...machine, status: 'unknown', last_seen: null }))
     byTeam.set(entry.team_id, team)
   }

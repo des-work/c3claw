@@ -2,6 +2,7 @@
   "teams": [
     {
       "team_id": "Brown_01",
+      "class_id": "Brown",
       "cidr": "10.0.1.0/24",
       "machines": [
         { "machine_id": "kali", "label": "Kali reporter", "zone": "operator", "address": "10.0.1.10" },

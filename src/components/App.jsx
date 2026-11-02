@@ -38,7 +38,7 @@ const App = () => {
       {/* The gallery is the primary monitoring surface. */}
       <div className="dashboard-main flex-1 min-h-0 p-3 md:p-5">
         <div className="h-full min-h-0">
-          {error && <div className="topology-error" role="alert">Status feed unavailable: {error}. Showing the last received snapshot.</div>}
+          {error && <div className="topology-error" role="alert">Telemetry refresh unavailable: {error}. Showing the last received snapshot.</div>}
           <TopologyGallery teams={teams} isMock={isMock} />
         </div>
       </div>

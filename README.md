@@ -130,7 +130,10 @@ heroku logs --tail
 | `EVENT_API_KEY`     | Yes for machine health | Bearer token for `POST /api/machines/heartbeat`; also protects event ingestion |
 | `TOPOLOGY_FILE`     | Optional | Path to JSON team/machine inventory. Omit to show only machines that report in. |
 | `TOPOLOGY_JSON`     | Optional | Inline inventory JSON for deployments without a local inventory file; takes precedence over `TOPOLOGY_FILE`. |
-| `DATABASE_URL`      | Recommended | PostgreSQL connection string (auto-set by Heroku Postgres addon)  |
+| `DATABASE_URL`      | Required in production | PostgreSQL connection string (auto-set by Heroku Postgres addon)  |
+| `DISCORD_BOT_TOKEN` | For Discord import | Bot token with Message Content intent and Read Message History permission |
+| `ALLOWED_CHANNELS` | For Discord import | Comma-separated telemetry channel IDs; add any number of classes or teams |
+| `DISCORD_INITIAL_BACKFILL` | No | Set to `true` only for a fresh installation that should import existing channel history. Default starts at the current channel head to avoid duplicating legacy events. |
 | `PORT`              | No       | Server port (Heroku sets this automatically; defaults to 3001)    |
 | `NPM_CONFIG_PRODUCTION` | Yes  | Must be `false` so Heroku installs devDependencies for the build  |
 
@@ -182,15 +185,15 @@ With `VITE_API_URL` unset the frontend uses synthetic mock data. Set `VITE_API_U
 | ------ | -------------- | ---------------- | ----------------------------------- |
 | GET    | `/api/health`  | None             | Health check + persistence status   |
 | GET    | `/api/status`  | None             | Teams with machine inventory and current health state |
-| GET    | `/api/events`  | None             | Last 100 events                     |
+| GET    | `/api/events?limit=20` | None       | Recent events; limit 1–100, default 100 |
 | POST   | `/api/events`  | Bearer token*    | Submit a new event                  |
 | POST   | `/api/machines/heartbeat` | Bearer token required | Report one machine's health |
 
-*Only enforced when `EVENT_API_KEY` is set.
+*Production requires `EVENT_API_KEY` and `DATABASE_URL`. Development may use memory storage.
 
 ### Machine topology and health
 
-Copy `config/topology.example.json` to `config/topology.json`, replace the sample team, names, and addresses with the real inventory, and set `TOPOLOGY_FILE=config/topology.json`. The real file is ignored by Git. For Heroku, set `TOPOLOGY_JSON` to the same JSON content as a config variable. Inventory machines appear as **unknown** until they send a report. Machines that report without an inventory entry also appear, using their reported zone and label.
+Copy `config/topology.example.json` to `config/topology.json`, replace the sample team, names, and addresses with the real inventory, and set `TOPOLOGY_FILE=config/topology.json`. Add `class_id` to each team to generate class filters automatically; there is no fixed class or team count. The real file is ignored by Git. For Heroku, set `TOPOLOGY_JSON` to the same JSON content as a config variable. Inventory machines appear as **unknown** until they send a report. Machines that report without an inventory entry also appear, using their reported zone and label.
 
 Send a report from a trusted monitor or VM agent with `team_id`, stable `machine_id`, `zone` (`operator`, `wan`, `dmz`, or `lan`), and `status` (`online`, `degraded`, or `offline`). Optional fields are `label` and `address`. Example:
 
@@ -202,6 +205,12 @@ curl -X POST http://localhost:3001/api/machines/heartbeat \
 ```
 
 An online report becomes **degraded** after 60 seconds without another report and **offline** after five minutes. A reported offline state is immediate. Operation events do not determine machine health. With PostgreSQL configured, latest machine reports persist across server restarts; without it, they live in memory.
+
+### Discord telemetry import and recovery
+
+The bot reads `[OCRT] team-id | Tool | Target | Result | Details` messages from `ALLOWED_CHANNELS`. It saves each Discord message ID as `source_id`, so retries and reconnect replay cannot double count an event. A per-channel cursor is persisted in PostgreSQL after each accepted message. The importer walks channel history from the cursor on reconnect and retries transport failures with backoff. Malformed or rejected messages are retained in `discord_rejections`; `/api/health` reports `discord_rejections` so an operator can investigate them. Bot access requires **View Channel**, **Read Message History**, and **Message Content** intent. The scoring backend's outgoing milestone alerts are a separate Discord path and are not treated as operation telemetry.
+
+For an existing dashboard with historical events, leave `DISCORD_INITIAL_BACKFILL=false` on the first deploy to initialize cursors at the current channel heads. For a new dashboard that should import older Discord telemetry, set it to `true` before first start. Initial backfill stops after 100,000 messages per channel and logs a recovery error instead of skipping older records. If the bot cannot read a channel, its cursor stays put and it retries. Keep PostgreSQL enabled in production; memory mode is for local preview only.
 
 ### POST /api/events body
 
