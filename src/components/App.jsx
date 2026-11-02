@@ -1,21 +1,23 @@
 import React, { useMemo } from 'react';
 import { useDashboardData } from '../hooks/useDashboardData';
 import HeaderBar from './HeaderBar';
-import TeamList from './TeamList';
+import TopologyGallery from './TopologyGallery';
 import ActivityFeed from './ActivityFeed';
 import { Network } from 'lucide-react';
 
 const App = () => {
-  const { teams, events, loading, error } = useDashboardData();
+  const { teams, events, loading, error, isMock } = useDashboardData();
 
   // Compute the top-level operating status for the entire simulation
   const overallStatus = useMemo(() => {
     if (!teams || teams.length === 0) return 'UNKNOWN';
-    const hasOffline = teams.some(t => t.status === 'offline');
-    const hasDegraded = teams.some(t => t.status === 'degraded');
+    const states = teams.flatMap(team => [team.status, ...(team.machines || []).map(machine => machine.status)]);
+    const hasOffline = states.includes('offline');
+    const hasDegraded = states.includes('degraded') || states.includes('idle');
     
     if (hasOffline) return 'CRITICAL';
     if (hasDegraded) return 'DEGRADED';
+    if (states.includes('unknown') || teams.some(team => !team.machines?.length)) return 'UNKNOWN';
     return 'ALL SYSTEMS GO';
   }, [teams]);
 
@@ -29,19 +31,20 @@ const App = () => {
   }
 
   return (
-    <div className="h-screen w-screen overflow-hidden flex flex-col bg-background">
+    <div className="dashboard-shell h-screen w-screen overflow-hidden flex flex-col bg-background">
       {/* 1. HEADER ZONE (Fixed Top) */}
       <HeaderBar teams={teams} overallStatus={overallStatus} />
 
-      {/* 2. MAIN BODY ZONE (Flex-1 for constrained scaling) */}
-      <div className="flex-1 overflow-hidden p-6">
-        <div className="h-full bg-surface/20 border border-surface/50 rounded-lg shadow-2xl flex flex-col">
-           <TeamList teams={teams} />
+      {/* The gallery is the primary monitoring surface. */}
+      <div className="dashboard-main flex-1 min-h-0 p-3 md:p-5">
+        <div className="h-full min-h-0">
+          {error && <div className="topology-error" role="alert">Status feed unavailable: {error}. Showing the last received snapshot.</div>}
+          <TopologyGallery teams={teams} isMock={isMock} />
         </div>
       </div>
 
       {/* 3. ACTIVITY FEED ZONE (Fixed Bottom Strip) */}
-      <div className="h-56 border-t-[3px] border-surface bg-background shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-10">
+      <div className="dashboard-feed h-40 md:h-44 border-t border-surface bg-background shrink-0 z-10">
         <ActivityFeed events={events} />
       </div>
     </div>

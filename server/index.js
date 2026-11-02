@@ -3,9 +3,10 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { initDb, insertEvent, getEvents } from './db.js'
+import { initDb, insertEvent, getEvents, upsertMachineStatus, getMachineStatuses } from './db.js'
 import { startBot } from './bot.js'
 import { seedEvents } from './seed.js'
+import { attachTopology, loadTopology, MACHINE_STATES, MACHINE_ZONES } from './topology.js'
 
 dotenv.config()
 
@@ -19,10 +20,12 @@ app.use(express.json())
 
 const PORT = process.env.PORT || 3001
 const EVENT_API_KEY = process.env.EVENT_API_KEY || ''
+const inventory = loadTopology()
 
 // Persistence: Postgres if DATABASE_URL is set, otherwise in-memory fallback
 let useDb = false
 const memoryEvents = []
+const memoryMachines = new Map()
 
 // Derive team status from event history
 function buildTeamStatus(allEvents) {
@@ -71,10 +74,45 @@ app.get('/api/health', (req, res) => {
 app.get('/api/status', async (req, res) => {
   try {
     const allEvents = useDb ? await getEvents(10000) : memoryEvents
-    res.json(buildTeamStatus(allEvents))
+    const observations = useDb ? await getMachineStatuses() : [...memoryMachines.values()]
+    res.json(attachTopology(buildTeamStatus(allEvents), inventory, observations))
   } catch (err) {
     console.error('/api/status error:', err.message)
     res.status(500).json({ error: err.message })
+  }
+})
+
+// Explicit machine health reports. Operation events alone cannot prove a target is online.
+app.post('/api/machines/heartbeat', async (req, res) => {
+  if (!EVENT_API_KEY) return res.status(503).json({ error: 'EVENT_API_KEY is required for machine reports' })
+  if (req.headers.authorization !== `Bearer ${EVENT_API_KEY}`) {
+    return res.status(401).json({ error: 'Invalid or missing API key' })
+  }
+
+  const { team_id, machine_id, label, zone, address, status } = req.body || {}
+  const validId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value)
+  if (!validId(team_id) || !validId(machine_id) || !MACHINE_ZONES.includes(zone) ||
+      !MACHINE_STATES.includes(status) ||
+      (label !== undefined && (typeof label !== 'string' || label.length > 80)) ||
+      (address !== undefined && (typeof address !== 'string' || address.length > 120))) {
+    return res.status(400).json({ error: 'Invalid machine report' })
+  }
+
+  const configured = inventory.find(team => team.team_id === team_id)?.machines.find(
+    machine => machine.machine_id === machine_id
+  )
+  const machine = {
+    team_id, machine_id, label: label || configured?.label || machine_id,
+    zone: configured?.zone || zone, address: address || configured?.address || null,
+    status, last_seen: new Date().toISOString(),
+  }
+  try {
+    if (useDb) await upsertMachineStatus(machine)
+    else memoryMachines.set(`${team_id}:${machine_id}`, machine)
+    res.status(201).json(machine)
+  } catch (err) {
+    console.error('/api/machines/heartbeat error:', err.message)
+    res.status(500).json({ error: 'Unable to save machine report' })
   }
 })
 

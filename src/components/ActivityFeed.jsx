@@ -3,12 +3,12 @@ import EventRow from './EventRow';
 import { Activity } from 'lucide-react';
 
 const ActivityFeed = ({ events }) => {
-  const feedEndRef = useRef(null);
+  const feedScrollRef = useRef(null);
 
   // Auto-scroll to the newest event when telemetry data updates
   useEffect(() => {
-    if (feedEndRef.current) {
-      feedEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (feedScrollRef.current) {
+      feedScrollRef.current.scrollTop = feedScrollRef.current.scrollHeight;
     }
   }, [events]);
 
@@ -25,7 +25,7 @@ const ActivityFeed = ({ events }) => {
       </div>
 
       {/* 2. Scrolling Terminal Window */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar shadow-inner relative">
+      <div ref={feedScrollRef} className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar shadow-inner relative">
         {latestEvents.length > 0 ? (
           latestEvents.map((event) => (
             <EventRow key={event.id} event={event} />
@@ -34,8 +34,6 @@ const ActivityFeed = ({ events }) => {
           <div className="text-muted text-sm opacity-50 italic">Waiting for incoming telemetry...</div>
         )}
         
-        {/* Invisible anchor element for auto-scrolling */}
-        <div ref={feedEndRef} className="h-1" />
       </div>
     </div>
   );

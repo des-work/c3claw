@@ -90,5 +90,5 @@ export function useDashboardData() {
     };
   }, [apiUrl]);
 
-  return { teams, events, loading, error };
+  return { teams, events, loading, error, isMock: !apiUrl };
 }

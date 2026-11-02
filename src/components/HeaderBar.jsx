@@ -11,28 +11,31 @@ const HeaderBar = ({ teams, overallStatus }) => {
     return () => clearInterval(timer);
   }, []);
 
-  const onlineCount = teams ? teams.filter(t => t.status === 'online').length : 0;
-  const totalCount = teams ? teams.length : 0;
+  const machines = teams ? teams.flatMap(team => team.machines || []) : [];
+  const hasInventory = machines.length > 0;
+  const onlineCount = hasInventory ? machines.filter(machine => machine.status === 'online').length
+    : (teams || []).filter(team => team.status === 'online').length;
+  const totalCount = hasInventory ? machines.length : (teams || []).length;
 
   return (
-    <div className="h-16 border-b border-surface/80 bg-surface/30 px-6 flex items-center justify-between shrink-0 shadow-sm z-20">
+    <div className="min-h-16 border-b border-surface/80 bg-surface/30 px-3 md:px-6 py-2 flex flex-wrap items-center justify-between gap-3 shrink-0 shadow-sm z-20">
       {/* 1. Dashboard Title */}
       <div className="flex items-center gap-3">
         <div className="bg-primary/10 p-2 rounded border border-primary/30 text-primary shadow-[0_0_10px_rgba(77,154,255,0.2)]">
-          <Crosshair className="w-6 h-6 animate-[spin_4s_linear_infinite]" />
+          <Crosshair className="w-6 h-6 animate-[spin_4s_linear_infinite] motion-reduce:animate-none" />
         </div>
-        <h1 className="text-xl font-bold tracking-[0.2em] text-white uppercase text-shadow-sm">
+        <h1 className="text-sm md:text-xl font-bold tracking-[0.12em] md:tracking-[0.2em] text-white uppercase text-shadow-sm">
           Operation Claw & Order
         </h1>
       </div>
 
       {/* 2. Metrics & Clock & Badge */}
-      <div className="flex items-center gap-8">
-        {/* Teams Online Metric */}
+      <div className="flex items-center gap-3 md:gap-8 flex-wrap">
+        {/* Fleet Machine Metric */}
         <div className="flex flex-col items-end">
-          <span className="text-[10px] text-muted tracking-widest uppercase mb-0.5">Fleet Status</span>
+          <span className="text-[10px] text-muted tracking-widest uppercase mb-0.5">{hasInventory ? 'Machines online' : 'Teams online'}</span>
           <span className="font-mono font-bold text-lg leading-none">
-            <span className={onlineCount === totalCount ? 'text-success drop-shadow-[0_0_5px_rgba(0,255,159,0.5)]' : 'text-warning drop-shadow-[0_0_5px_rgba(255,184,0,0.5)]'}>
+            <span className={totalCount > 0 && onlineCount === totalCount ? 'text-success drop-shadow-[0_0_5px_rgba(0,255,159,0.5)]' : 'text-warning drop-shadow-[0_0_5px_rgba(255,184,0,0.5)]'}>
               {onlineCount}
             </span>
             <span className="text-muted"> / {totalCount}</span>

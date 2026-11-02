@@ -1,0 +1,130 @@
+import { useMemo, useState } from 'react'
+import { Network, Search } from 'lucide-react'
+
+const ZONES = [
+  { id: 'operator', label: 'Operator' },
+  { id: 'wan', label: 'WAN' },
+  { id: 'dmz', label: 'DMZ' },
+  { id: 'lan', label: 'LAN' },
+]
+const CLASSES = ['ALL', 'Brown', 'Flores', 'McIntyre', 'Nestler']
+const STATES = ['online', 'degraded', 'offline', 'unknown']
+
+function professorOf(teamId = '') {
+  const match = teamId.match(/^([A-Za-z]{3,})\d*[_-]/)
+  if (!match || ['TEAM', 'DEV', 'TEST'].includes(match[1].toUpperCase())) return null
+  return match[1].toLowerCase()
+}
+
+function Machine({ machine }) {
+  const state = STATES.includes(machine.status) ? machine.status : 'unknown'
+  const seen = machine.last_seen ? new Date(machine.last_seen).toLocaleTimeString([], {
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }) : 'never'
+  return (
+    <div className={`machine machine--${state}`} aria-label={`${machine.label || machine.machine_id}: ${state}`}>
+      <span className="machine__signal" aria-hidden="true" />
+      <div className="machine__copy">
+        <strong title={machine.label || machine.machine_id}>{machine.label || machine.machine_id}</strong>
+        <small title={machine.address || 'No address'}>{machine.address || 'Address unlisted'}</small>
+        <span className="machine__state" title={`Last report: ${seen}`}>{state}</span>
+      </div>
+    </div>
+  )
+}
+
+function TopologyCard({ team }) {
+  const machines = Array.isArray(team.machines) ? team.machines : []
+  const counts = Object.fromEntries(STATES.map(state => [state, machines.filter(machine => machine.status === state).length]))
+  const cardState = counts.offline ? 'offline' : counts.degraded ? 'degraded' :
+    counts.unknown || !machines.length ? 'unknown' : 'online'
+  const cardLabel = counts.offline ? `${counts.offline} machine${counts.offline === 1 ? '' : 's'} down` :
+    counts.degraded ? `${counts.degraded} degraded` :
+      counts.unknown ? `${counts.unknown} unreported` :
+        machines.length ? 'all online' : 'no inventory'
+
+  return (
+    <article className={`topology-card topology-card--${cardState}`} aria-label={`${team.team_id} network topology`}>
+      <div className="topology-card__heading">
+        <div className="topology-card__title">
+          <span className="topology-card__eyebrow">TEAM NETWORK / {team.cidr || 'CIDR UNLISTED'}</span>
+          <h3>{team.team_id}</h3>
+        </div>
+        <span className={`topology-card__team-status status--${cardState}`}>
+          <span className="status-dot" aria-hidden="true" />{cardLabel}
+        </span>
+      </div>
+
+      <div className="topology-card__summary" aria-label="Machine status counts">
+        <span><b className="status-text--online">{counts.online}</b> online</span>
+        <span><b className="status-text--degraded">{counts.degraded}</b> degraded</span>
+        <span><b className="status-text--offline">{counts.offline}</b> offline</span>
+        <span><b className="status-text--unknown">{counts.unknown}</b> unknown</span>
+      </div>
+
+      {machines.length ? (
+        <div className="topology-card__network" aria-label="Operator to WAN to DMZ to LAN">
+          {ZONES.map(zone => {
+            const nodes = machines.filter(machine => machine.zone === zone.id)
+            return (
+              <div className="topology-zone" key={zone.id}>
+                <div className="topology-zone__heading"><span className="topology-zone__junction" />{zone.label}</div>
+                <div className="topology-zone__nodes">
+                  {nodes.length ? nodes.map(machine => <Machine key={machine.machine_id} machine={machine} />) : (
+                    <div className="topology-zone__empty">No node listed</div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="topology-card__unmapped">Machine inventory not configured for this team</div>
+      )}
+    </article>
+  )
+}
+
+export default function TopologyGallery({ teams = [], isMock = false }) {
+  const [search, setSearch] = useState('')
+  const [selectedClass, setSelectedClass] = useState('ALL')
+  const filtered = useMemo(() => teams.filter(team =>
+    team.team_id.toLowerCase().includes(search.toLowerCase()) &&
+    (selectedClass === 'ALL' || professorOf(team.team_id) === selectedClass.toLowerCase())
+  ), [teams, search, selectedClass])
+  const machineCount = teams.reduce((total, team) => total + (team.machines?.length || 0), 0)
+
+  return (
+    <section className="topology-gallery" aria-label="Team network topology gallery">
+      <div className="topology-gallery__header">
+        <div className="topology-gallery__intro">
+          <div className="topology-gallery__kicker"><Network size={15} aria-hidden="true" /> LIVE NETWORK OVERVIEW</div>
+          <h2>Team topologies</h2>
+          <p>{teams.length} teams · {machineCount} mapped machines · updates every 15s</p>
+        </div>
+        <div className="topology-gallery__tools">
+          <label className="topology-gallery__search">
+            <Search size={16} aria-hidden="true" />
+            <span className="sr-only">Search teams</span>
+            <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search teams" />
+          </label>
+          <div className="topology-gallery__filters" aria-label="Filter by class">
+            {CLASSES.map(name => <button key={name} type="button" aria-pressed={selectedClass === name}
+              onClick={() => setSelectedClass(name)}>{name}</button>)}
+          </div>
+        </div>
+      </div>
+      <div className="topology-gallery__legend" aria-label="Machine status legend">
+        {STATES.map(state => <span key={state} className={`status--${state}`}><i className="status-dot" />{state}</span>)}
+        <span className="topology-gallery__source">{isMock ? 'Preview data · simulated machine states' : 'Machine state comes from authenticated health reports'}</span>
+      </div>
+      <div className="topology-gallery__scroll">
+        {filtered.length ? <div className="topology-gallery__grid">
+          {filtered.map(team => <TopologyCard key={team.team_id} team={team} />)}
+        </div> : <div className="topology-gallery__empty">
+          {teams.length ? 'No teams match this filter' : 'No team telemetry or topology configured'}
+        </div>}
+      </div>
+    </section>
+  )
+}

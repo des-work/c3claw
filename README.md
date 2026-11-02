@@ -8,11 +8,10 @@ Operation Claw & Order is a high-density, single-page React application designed
 
 ## Features
 
-- **Live Team Monitoring** — Track 12+ teams simultaneously with real-time status indicators (Online / Degraded / Offline / Unknown)
-- **Attack Phase Visualization** — Visual progress bars showing each team's current incursion phase (Phases 1-3)
-- **Active Operations Feed** — See the last command or tool each team executed
+- **Topology Gallery** — Scan each team's operator, WAN, DMZ, and LAN machines in a prominent card gallery
+- **Live Machine Monitoring** — Authenticated reports update color coded machine indicators; missing reports remain unknown
 - **Live Telemetry Stream** — A scrolling terminal-style activity feed showing the 20 most recent events with color-coded results (SUCCESS / FAILED / BLOCKED)
-- **Overall System Health Badge** — Aggregated fleet status: ALL SYSTEMS GO / DEGRADED / CRITICAL
+- **Overall System Health Badge** — Aggregated team and machine status: ALL SYSTEMS GO / DEGRADED / CRITICAL / UNKNOWN
 - **Real-Time Clock** — UTC/local timestamp prominently displayed in the header
 - **Client-Side Search** — Instantly filter teams by designation with a search bar
 - **Responsive Dark Theme** — Custom Tailwind color palette designed for low-light environments and large displays
@@ -50,18 +49,19 @@ operation-claw-and-order/
 │
 ├── server/
 │   ├── index.js                # Express server, API routes, auth
+│   ├── topology.js             # Inventory merge and freshness rules
 │   └── db.js                   # PostgreSQL connection & queries
+├── config/topology.example.json # Sample machine inventory (not loaded automatically)
 │
 └── src/
     ├── main.jsx                # React entry point
     ├── index.css               # Tailwind directives + scrollbar styles
-    ├── mockData.js             # 12 mock teams + 20 mock events
+    ├── mockData.js             # Synthetic teams, machines, and events
     ├── components/
     │   ├── App.jsx             # Root layout orchestrator
     │   ├── HeaderBar.jsx       # Title, fleet metric, clock, status badge
-    │   ├── StatusBadge.jsx     # ALL SYSTEMS GO / DEGRADED / CRITICAL
-    │   ├── TeamList.jsx        # Searchable, scrollable team table
-    │   ├── TeamRow.jsx         # Team row with live "last seen" timer
+    │   ├── StatusBadge.jsx     # Overall system health state
+    │   ├── TopologyGallery.jsx # Searchable gallery with machine status
     │   ├── ActivityFeed.jsx    # Scrolling telemetry terminal
     │   └── EventRow.jsx        # Single event line in the feed
     ├── hooks/
@@ -95,18 +95,13 @@ This automatically sets `DATABASE_URL` for you.
 **All config vars must be set BEFORE the first deploy** because `VITE_API_URL` is baked into the frontend at build time.
 
 ```bash
-# Required: Your Heroku Platform API key (to fetch team app statuses)
-heroku config:set HEROKU_API_KEY=your-heroku-api-key
-
-# Required: Only show Heroku apps matching this prefix as teams
-# e.g. if team apps are named ocrt-team-01, ocrt-team-02, etc.
-heroku config:set TEAM_APP_PREFIX=ocrt-
-
 # Required: The public URL of this app (so the frontend can reach the API)
 heroku config:set VITE_API_URL=https://your-app-name.herokuapp.com
 
-# Recommended: Protect the event POST endpoint with an API key
+# Required for machine reports; recommended for event ingestion
 heroku config:set EVENT_API_KEY=a-strong-random-secret
+
+# Optional: set TOPOLOGY_JSON in Heroku config to your inventory JSON
 
 # Required: Ensure devDependencies (Vite, Tailwind) are installed during build
 heroku config:set NPM_CONFIG_PRODUCTION=false
@@ -131,10 +126,10 @@ heroku logs --tail
 
 | Variable            | Required | Description                                                       |
 | ------------------- | -------- | ----------------------------------------------------------------- |
-| `HEROKU_API_KEY`    | Yes      | Heroku Platform API key — used to fetch team app statuses         |
-| `TEAM_APP_PREFIX`   | Yes      | Only Heroku apps whose name starts with this prefix appear as teams |
 | `VITE_API_URL`      | Yes*     | Backend URL for the frontend to call. If empty, uses mock data    |
-| `EVENT_API_KEY`     | Recommended | Bearer token required for `POST /api/events`. If empty, endpoint is open |
+| `EVENT_API_KEY`     | Yes for machine health | Bearer token for `POST /api/machines/heartbeat`; also protects event ingestion |
+| `TOPOLOGY_FILE`     | Optional | Path to JSON team/machine inventory. Omit to show only machines that report in. |
+| `TOPOLOGY_JSON`     | Optional | Inline inventory JSON for deployments without a local inventory file; takes precedence over `TOPOLOGY_FILE`. |
 | `DATABASE_URL`      | Recommended | PostgreSQL connection string (auto-set by Heroku Postgres addon)  |
 | `PORT`              | No       | Server port (Heroku sets this automatically; defaults to 3001)    |
 | `NPM_CONFIG_PRODUCTION` | Yes  | Must be `false` so Heroku installs devDependencies for the build  |
@@ -153,8 +148,8 @@ heroku logs --tail
 ### Quick start
 
 ```bash
-git clone https://github.com/009182323-mango/OCRT.git
-cd OCRT
+git clone https://github.com/des-work/c3claw.git
+cd c3claw
 npm install
 cp .env.example .env
 ```
@@ -177,7 +172,7 @@ npm run server
 npm run build-start
 ```
 
-The Vite dev server automatically proxies `/api/*` requests to `localhost:3001`, so you don't need to set `VITE_API_URL` during local development.
+With `VITE_API_URL` unset the frontend uses synthetic mock data. Set `VITE_API_URL=http://localhost:3001` to inspect live data from the local server.
 
 ---
 
@@ -186,11 +181,27 @@ The Vite dev server automatically proxies `/api/*` requests to `localhost:3001`,
 | Method | Endpoint       | Auth             | Description                         |
 | ------ | -------------- | ---------------- | ----------------------------------- |
 | GET    | `/api/health`  | None             | Health check + persistence status   |
-| GET    | `/api/status`  | None             | Array of team objects from Heroku   |
+| GET    | `/api/status`  | None             | Teams with machine inventory and current health state |
 | GET    | `/api/events`  | None             | Last 100 events                     |
 | POST   | `/api/events`  | Bearer token*    | Submit a new event                  |
+| POST   | `/api/machines/heartbeat` | Bearer token required | Report one machine's health |
 
 *Only enforced when `EVENT_API_KEY` is set.
+
+### Machine topology and health
+
+Copy `config/topology.example.json` to `config/topology.json`, replace the sample team, names, and addresses with the real inventory, and set `TOPOLOGY_FILE=config/topology.json`. The real file is ignored by Git. For Heroku, set `TOPOLOGY_JSON` to the same JSON content as a config variable. Inventory machines appear as **unknown** until they send a report. Machines that report without an inventory entry also appear, using their reported zone and label.
+
+Send a report from a trusted monitor or VM agent with `team_id`, stable `machine_id`, `zone` (`operator`, `wan`, `dmz`, or `lan`), and `status` (`online`, `degraded`, or `offline`). Optional fields are `label` and `address`. Example:
+
+```bash
+curl -X POST http://localhost:3001/api/machines/heartbeat \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer your-event-api-key' \
+  -d '{"team_id":"Brown_01","machine_id":"web","label":"Web target","zone":"dmz","address":"10.0.1.20","status":"online"}'
+```
+
+An online report becomes **degraded** after 60 seconds without another report and **offline** after five minutes. A reported offline state is immediate. Operation events do not determine machine health. With PostgreSQL configured, latest machine reports persist across server restarts; without it, they live in memory.
 
 ### POST /api/events body
 
@@ -225,6 +236,7 @@ curl -X POST https://your-app.herokuapp.com/api/events \
 | `npm run build-start`| Build frontend and serve via Express     |
 | `npm start`          | Start Express backend (production mode)  |
 | `npm run lint`       | Run ESLint across all source files       |
+| `npm test`           | Test machine status aging and inventory merging |
 
 ---
 
@@ -232,7 +244,7 @@ curl -X POST https://your-app.herokuapp.com/api/events \
 
 ### Mock Mode (default)
 
-When `VITE_API_URL` is not set, the dashboard renders 12 pre-configured teams and 20 simulated events from `mockData.js`. New mock events are generated every 4 seconds, and online team statuses refresh every 15 seconds.
+When `VITE_API_URL` is not set, the dashboard renders synthetic teams, topology nodes, and events from `mockData.js`. New mock events are generated every 4 seconds, and online team statuses refresh every 15 seconds. Mock indicators are for preview only.
 
 ### Live API Mode
 

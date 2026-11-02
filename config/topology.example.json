@@ -1,0 +1,14 @@
+{
+  "teams": [
+    {
+      "team_id": "Brown_01",
+      "cidr": "10.0.1.0/24",
+      "machines": [
+        { "machine_id": "kali", "label": "Kali reporter", "zone": "operator", "address": "10.0.1.10" },
+        { "machine_id": "gateway", "label": "WAN gateway", "zone": "wan", "address": "10.0.1.1" },
+        { "machine_id": "web", "label": "Web target", "zone": "dmz", "address": "10.0.1.20" },
+        { "machine_id": "dc", "label": "Domain controller", "zone": "lan", "address": "10.0.1.30" }
+      ]
+    }
+  ]
+}

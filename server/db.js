@@ -31,8 +31,39 @@ export async function initDb() {
       details TEXT DEFAULT ''
     )
   `)
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS machine_status (
+      team_id TEXT NOT NULL,
+      machine_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      zone TEXT NOT NULL,
+      address TEXT,
+      status TEXT NOT NULL,
+      last_seen TIMESTAMPTZ NOT NULL,
+      PRIMARY KEY (team_id, machine_id)
+    )
+  `)
   console.log('PostgreSQL connected — events table ready')
   return true
+}
+
+export async function upsertMachineStatus(machine) {
+  const db = getPool()
+  await db.query(
+    `INSERT INTO machine_status (team_id, machine_id, label, zone, address, status, last_seen)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (team_id, machine_id) DO UPDATE SET
+       label = EXCLUDED.label, zone = EXCLUDED.zone, address = EXCLUDED.address,
+       status = EXCLUDED.status, last_seen = EXCLUDED.last_seen`,
+    [machine.team_id, machine.machine_id, machine.label, machine.zone,
+      machine.address, machine.status, machine.last_seen]
+  )
+}
+
+export async function getMachineStatuses() {
+  const db = getPool()
+  const { rows } = await db.query('SELECT * FROM machine_status ORDER BY team_id, machine_id')
+  return rows
 }
 
 export async function insertEvent(event) {
