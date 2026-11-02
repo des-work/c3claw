@@ -1,19 +1,34 @@
 import pg from 'pg'
+import { readFileSync } from 'node:fs'
 
 const { Pool } = pg
 let pool = null
 
+export function poolConfig(databaseUrl, caFile = process.env.PG_CA_CERT_FILE) {
+  const parsed = new URL(databaseUrl)
+  const local = ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)
+  // node-postgres can let SSL query parameters override its ssl object.
+  // Use only this verified TLS configuration (and the optional trusted CA).
+  for (const key of ['sslmode', 'sslrootcert', 'sslcert', 'sslkey']) parsed.searchParams.delete(key)
+  const ca = caFile ? readFileSync(caFile, 'utf8') : undefined
+  const max = Number(process.env.DB_POOL_SIZE || 5)
+  if (!Number.isInteger(max) || max < 1) throw new Error('DB_POOL_SIZE must be a positive integer')
+  return {
+    connectionString: parsed.toString(),
+    ssl: local ? false : { rejectUnauthorized: true, ...(ca ? { ca } : {}) },
+    max,
+    connectionTimeoutMillis: 10_000,
+  }
+}
+
 export function getPool() {
   if (!pool && process.env.DATABASE_URL) {
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false },
-    })
+    pool = new Pool(poolConfig(process.env.DATABASE_URL))
   }
   return pool
 }
 
-export async function initDb() {
+export async function migrateDb() {
   const db = getPool()
   if (!db) return false
   await db.query(`CREATE TABLE IF NOT EXISTS events (
@@ -22,8 +37,12 @@ export async function initDb() {
     source_id TEXT
   )`)
   await db.query('ALTER TABLE events ADD COLUMN IF NOT EXISTS source_id TEXT')
-  await db.query('CREATE UNIQUE INDEX IF NOT EXISTS events_source_id_unique ON events (source_id) WHERE source_id IS NOT NULL')
-  await db.query('CREATE INDEX IF NOT EXISTS events_recent_idx ON events (timestamp DESC, id DESC)')
+  for (const index of ['events_source_id_unique', 'events_recent_idx']) {
+    const { rows } = await db.query(`SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass($1)`, [index])
+    if (rows[0]?.indisvalid === false) await db.query(`DROP INDEX CONCURRENTLY ${index}`)
+  }
+  await db.query('CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS events_source_id_unique ON events (source_id) WHERE source_id IS NOT NULL')
+  await db.query('CREATE INDEX CONCURRENTLY IF NOT EXISTS events_recent_idx ON events (timestamp DESC, id DESC)')
   await db.query(`CREATE TABLE IF NOT EXISTS team_status (
     team_id TEXT PRIMARY KEY, last_seen TIMESTAMPTZ NOT NULL, last_action TEXT NOT NULL,
     event_count BIGINT NOT NULL, blocked_count BIGINT NOT NULL
@@ -51,8 +70,41 @@ export async function initDb() {
     message_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, reason TEXT NOT NULL,
     content TEXT NOT NULL, rejected_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`)
+  await db.query(`CREATE TABLE IF NOT EXISTS backend_sync_cursors (
+    source TEXT PRIMARY KEY, last_id BIGINT NOT NULL DEFAULT 0
+  )`)
   console.log('PostgreSQL connected — events, summaries, and machines ready')
   return true
+}
+
+export async function initDb() {
+  const db = getPool()
+  if (!db) return false
+  if (process.env.NODE_ENV !== 'production') return migrateDb()
+  // Production schema changes and backfills run once in the release phase.
+  await db.query('SELECT 1 FROM events LIMIT 1')
+  await db.query('SELECT 1 FROM team_status LIMIT 1')
+  await db.query('SELECT 1 FROM machine_status LIMIT 1')
+  await db.query('SELECT 1 FROM discord_cursors LIMIT 1')
+  await db.query('SELECT 1 FROM discord_rejections LIMIT 1')
+  await db.query('SELECT 1 FROM backend_sync_cursors LIMIT 1')
+  for (const index of ['events_source_id_unique', 'events_recent_idx']) {
+    const { rows } = await db.query('SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass($1)', [index])
+    if (rows[0]?.indisvalid !== true) throw new Error(`Missing or invalid ${index}; run npm run migrate`)
+  }
+  return true
+}
+
+export async function getBackendCursor(source = 'scoring') {
+  const { rows } = await getPool().query(
+    'SELECT last_id FROM backend_sync_cursors WHERE source = $1', [source])
+  return Number(rows[0]?.last_id || 0)
+}
+
+export async function saveBackendCursor(lastId, source = 'scoring') {
+  await getPool().query(`INSERT INTO backend_sync_cursors (source, last_id) VALUES ($1, $2)
+    ON CONFLICT (source) DO UPDATE SET last_id = GREATEST(backend_sync_cursors.last_id, EXCLUDED.last_id)`,
+  [source, lastId])
 }
 
 export async function upsertMachineStatus(machine) {

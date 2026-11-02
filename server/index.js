@@ -5,7 +5,8 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { initDb, insertEvent, getEvents, getTeamStatuses, getDiscordRejectionCount, upsertMachineStatus, getMachineStatuses } from './db.js'
 import { parseEvent, statusFromSummary, updateSummary } from './events.js'
-import { startBot } from './bot.js'
+import { startBot, getBotHealth } from './bot.js'
+import { startBackendSync, getBackendSyncHealth } from './backend-sync.js'
 import { seedEvents } from './seed.js'
 import { attachTopology, loadTopology, MACHINE_STATES, MACHINE_ZONES } from './topology.js'
 
@@ -16,7 +17,8 @@ const __dirname = path.dirname(__filename)
 
 const app = express()
 
-app.use(cors())
+const corsOrigins = (process.env.CORS_ORIGINS || '').split(',').map(origin => origin.trim()).filter(Boolean)
+if (corsOrigins.length) app.use(cors({ origin: corsOrigins, methods: ['GET', 'POST'] }))
 app.use(express.json())
 
 const PORT = process.env.PORT || 3001
@@ -32,8 +34,18 @@ const memoryMachines = new Map()
 
 app.get('/api/health', async (req, res) => {
   try {
-    res.json({ status: 'ok', persistence: useDb ? 'postgres' : 'memory',
-      discord_rejections: useDb ? await getDiscordRejectionCount() : 0 })
+    const discord = getBotHealth()
+    const discordStale = discord.oldest_sync && Date.now() - Date.parse(discord.oldest_sync) > 120_000
+    const degraded = discord.enabled && (!discord.connected || discord.synced_channels < discord.channels ||
+      discordStale || discord.failed_channels || discord.last_error)
+    const health = { status: degraded ? 'degraded' : 'ok', persistence: useDb ? 'postgres' : 'memory',
+      discord, backend_sync: getBackendSyncHealth(),
+      discord_rejections: useDb ? await getDiscordRejectionCount() : 0 }
+    const backend = health.backend_sync
+    const backendStale = backend.last_success && Date.now() - Date.parse(backend.last_success) > 120_000
+    if (backend.enabled && (!backend.last_success || backendStale || backend.last_error ||
+      backend.pending_events > 1000)) health.status = 'degraded'
+    res.status(health.status === 'degraded' ? 503 : 200).json(health)
   } catch (error) {
     res.status(503).json({ status: 'degraded', error: error.message })
   }
@@ -172,6 +184,10 @@ app.use((req, res) => {
 
 // Boot
 async function start() {
+  if (process.env.NODE_ENV === 'production' && process.env.DISCORD_BOT_TOKEN &&
+      !process.env.ALLOWED_CHANNELS?.trim()) {
+    throw new Error('Production Discord import requires explicit ALLOWED_CHANNELS')
+  }
   try {
     useDb = await initDb()
   } catch (err) {
@@ -182,12 +198,16 @@ async function start() {
   if (process.env.NODE_ENV === 'production' && (!useDb || !EVENT_API_KEY)) {
     throw new Error('Production requires DATABASE_URL and EVENT_API_KEY')
   }
+  if (process.env.BACKEND_EXPORT_URL && !process.env.BACKEND_EXPORT_SECRET) {
+    throw new Error('BACKEND_EXPORT_SECRET is required when BACKEND_EXPORT_URL is set')
+  }
 
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`)
     console.log(`Persistence: ${useDb ? 'PostgreSQL' : 'in-memory (events lost on restart)'}`)
     if (!EVENT_API_KEY) console.warn('WARNING: EVENT_API_KEY is not set — POST /api/events is unauthenticated')
     startBot()
+    startBackendSync()
   })
 }
 

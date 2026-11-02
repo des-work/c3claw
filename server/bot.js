@@ -6,6 +6,17 @@ const DEFAULT_CHANNELS = [
   '1492978716815655137', '1493081326130040863', '1493081407726161970',
   '1493081431386099862', '1493081451275485275',
 ]
+const botState = { connected: false, last_sync: null, last_error: null, channels: 0 }
+const channelSync = new Map()
+const channelErrors = new Map()
+
+export function getBotHealth() {
+  const syncTimes = [...channelSync.values()]
+  return { ...botState, enabled: Boolean(process.env.DISCORD_BOT_TOKEN),
+    synced_channels: channelSync.size,
+    oldest_sync: syncTimes.length ? new Date(Math.min(...syncTimes)).toISOString() : null,
+    failed_channels: channelErrors.size }
+}
 
 export function parseDiscordTelemetry(content) {
   if (!content.startsWith(MESSAGE_PREFIX)) return null
@@ -18,24 +29,31 @@ export function parseDiscordTelemetry(content) {
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 export async function replayHistory(channel, checkpoint, processMessage, maxPages = 1000) {
-  // Discord returns newest first. Walk backward, then process oldest first.
-  const pages = []
-  let before
+  // Freeze the head, discover page boundaries, then refetch oldest first.
+  // Keep only page IDs in memory even when the channel has a large history.
+  const head = (await channel.messages.fetch({ limit: 1, cache: false })).first()
+  if (!head) return
+  const boundaries = []
+  let before = (BigInt(head.id) + 1n).toString()
   for (let page = 0; page < maxPages; page++) {
-    const options = { limit: 100, cache: false }
-    if (before) options.before = before
-    const batch = await channel.messages.fetch(options)
+    const batch = await channel.messages.fetch({ limit: 100, cache: false, before })
     if (!batch.size) break
     const sorted = [...batch.values()].sort((a, b) =>
       BigInt(a.id) < BigInt(b.id) ? -1 : BigInt(a.id) > BigInt(b.id) ? 1 : 0)
-    pages.push(sorted.filter(message => !checkpoint || BigInt(message.id) > BigInt(checkpoint)))
+    boundaries.push(before)
     before = sorted[0].id
     if (checkpoint && BigInt(before) <= BigInt(checkpoint)) break
     if (batch.size < 100) break
     if (page === maxPages - 1) throw new Error('Replay page limit reached; manual recovery required')
   }
-  for (const page of pages.reverse()) {
-    for (const message of page) await processMessage(message)
+  for (const boundary of boundaries.reverse()) {
+    const batch = await channel.messages.fetch({ limit: 100, cache: false, before: boundary })
+    if (!batch.size) throw new Error('Discord replay page disappeared; retrying from cursor')
+    const sorted = [...batch.values()].sort((a, b) =>
+      BigInt(a.id) < BigInt(b.id) ? -1 : BigInt(a.id) > BigInt(b.id) ? 1 : 0)
+    for (const message of sorted) {
+      if (!checkpoint || BigInt(message.id) > BigInt(checkpoint)) await processMessage(message)
+    }
   }
 }
 
@@ -52,6 +70,8 @@ export function startBot() {
   }
   const channels = new Set((process.env.ALLOWED_CHANNELS
     ? process.env.ALLOWED_CHANNELS.split(',') : DEFAULT_CHANNELS).map(id => id.trim()).filter(Boolean))
+  if ([...channels].some(id => !/^\d{15,22}$/.test(id))) throw new Error('ALLOWED_CHANNELS contains an invalid Discord channel ID')
+  botState.channels = channels.size
   const cursors = new Map()
   const syncing = new Set()
   const resyncNeeded = new Set()
@@ -154,7 +174,13 @@ export function startBot() {
         try {
           await replay(channelId)
           delay = 1000
+          botState.last_sync = new Date().toISOString()
+          channelSync.set(channelId, Date.now())
+          channelErrors.delete(channelId)
+          botState.last_error = channelErrors.values().next().value || null
         } catch (error) {
+          channelErrors.set(channelId, error.message)
+          botState.last_error = error.message
           console.error(`[bot] Channel ${channelId} retrying after error: ${error.stack || error}`)
           resyncNeeded.add(channelId)
           await wait(delay)
@@ -182,14 +208,20 @@ export function startBot() {
 
   client.once('clientReady', c => {
     initialized = true
+    botState.connected = true
     console.log(`Discord bot connected as ${c.user.tag}; monitoring ${channels.size} channel(s)`)
     syncAll()
   })
-  client.on('shardResume', () => { if (initialized) syncAll() })
-  client.on('shardReady', () => { if (initialized) syncAll() })
+  client.on('shardResume', () => { botState.connected = true; if (initialized) syncAll() })
+  client.on('shardReady', () => { botState.connected = true; if (initialized) syncAll() })
+  client.on('shardDisconnect', () => { botState.connected = false })
   client.on('messageCreate', message => {
     if (channels.has(message.channelId)) requestSync(message.channelId, true)
   })
   setInterval(() => { if (initialized) syncAll() }, 60_000).unref()
-  client.login(token).catch(error => console.error(`[bot] Login failed: ${error.message}`))
+  client.login(token).catch(error => {
+    botState.connected = false
+    botState.last_error = `Discord login failed: ${error.message}`
+    console.error(`[bot] ${botState.last_error}`)
+  })
 }
