@@ -1,5 +1,6 @@
 import { Client, GatewayIntentBits } from 'discord.js'
 import { getPool, getDiscordCursor, saveDiscordCursor, recordDiscordRejection } from './db.js'
+import { loadDiscordSources, authorizedDiscordSource } from './discord-sources.js'
 
 const MESSAGE_PREFIX = '[OCRT]'
 const botState = { connected: false, last_sync: null, last_error: null, channels: 0 }
@@ -67,6 +68,7 @@ export function startBot() {
   const channels = new Set((process.env.ALLOWED_CHANNELS || '').split(',').map(id => id.trim()).filter(Boolean))
   if (!channels.size) throw new Error('Discord import requires explicit ALLOWED_CHANNELS')
   if ([...channels].some(id => !/^\d{15,22}$/.test(id))) throw new Error('ALLOWED_CHANNELS contains an invalid Discord channel ID')
+  const sources = loadDiscordSources(channels)
   botState.channels = channels.size
   const cursors = new Map()
   const syncing = new Set()
@@ -110,13 +112,20 @@ export function startBot() {
       await advance(message.channelId, message.id)
       return
     }
+    if (!authorizedDiscordSource(sources, message, payload.team_id)) {
+      console.error(`[bot] Unauthorized telemetry source in channel ${message.channelId}, message ${message.id}`)
+      if (getPool()) await recordDiscordRejection(message, 'Webhook/channel is not authorized for this team')
+      await advance(message.channelId, message.id)
+      return
+    }
     let delay = 1000
     while (true) {
       try {
         const response = await fetch(`http://127.0.0.1:${process.env.PORT || 3001}/api/events`, {
           method: 'POST', signal: AbortSignal.timeout(10_000),
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({ ...payload, source_id: `discord:${message.id}` }),
+          body: JSON.stringify({ ...payload, source_id: `discord:${message.id}`,
+            timestamp: new Date(message.createdTimestamp).toISOString() }),
         })
         if (response.ok) {
           await advance(message.channelId, message.id)

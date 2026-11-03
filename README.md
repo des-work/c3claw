@@ -137,6 +137,7 @@ heroku logs --tail
 | `DATABASE_URL`      | Required in production | PostgreSQL connection string (auto-set by Heroku Postgres addon)  |
 | `DISCORD_BOT_TOKEN` | For Discord import | Bot token with Message Content intent and Read Message History permission |
 | `ALLOWED_CHANNELS` | For Discord import | Comma-separated telemetry channel IDs; add any number of classes or teams |
+| `DISCORD_SOURCE_POLICY_FILE` | For Discord import | Required JSON file binding each allowed channel and webhook ID to exact team IDs. Copy `config/discord-sources.example.json`, replace placeholders and keep the deployment file private. |
 | `DISCORD_INITIAL_BACKFILL` | No | Set to `true` only for a fresh installation that should import existing channel history. Default starts at the current channel head to avoid duplicating legacy events. |
 | `BACKEND_EXPORT_URL` | For scored events | Base URL of the scoring backend's authenticated export API. |
 | `BACKEND_EXPORT_SECRET` | For scored events | Backend read-only `EVENT_EXPORT_SECRET`; required with `BACKEND_EXPORT_URL`. |
@@ -218,6 +219,10 @@ An online report becomes **degraded** after 60 seconds without another report an
 ### Discord telemetry import and recovery
 
 The bot reads `[OCRT] team-id | Tool | Target | Result | Details` messages from `ALLOWED_CHANNELS`. It saves each Discord message ID as `source_id`, so retries and reconnect replay cannot double count an event. A per-channel cursor is persisted in PostgreSQL after each accepted message. The importer walks channel history from the cursor on reconnect and retries transport failures with backoff. Malformed or rejected messages are retained in `discord_rejections`; `/api/health` reports `discord_rejections` so an operator can investigate them. Bot access requires **View Channel**, **Read Message History**, and **Message Content** intent. The scoring backend's outgoing milestone alerts are a separate Discord path and are not treated as operation telemetry. Scored events arrive through the authenticated backend export and are acknowledged only after this dashboard stores them; `backend:<event_id>` prevents replay duplicates.
+
+Copy `config/discord-sources.example.json` to `config/discord-sources.json`, enter actual channel/webhook IDs and exact team IDs, then set `DISCORD_SOURCE_POLICY_FILE=config/discord-sources.json`. Webhook IDs are metadata, not secret URL tokens. Every allowlisted channel needs at least one mapping; missing/ambiguous mappings stop reader startup. An ordinary user or bot message, an unknown webhook, or a webhook claiming another team's ID is rejected and recorded. Give each Kali/team its own limited posting hook where practical. A holder of that hook can still impersonate its mapped team, so keep the URL private and rotate it after exposure.
+
+Imported timestamps use Discord's original message creation time, including after replay. This is the Discord posting time, not a measured tool execution time. Existing Kali scripts must post the exact `[OCRT]` contract; free-form messages/embeds need a reviewed formatter. Use one dashboard feed per logical event: Discord import and backend export have different source IDs and do not deduplicate each other.
 
 For an existing dashboard with historical events, leave `DISCORD_INITIAL_BACKFILL=false` on the first deploy to initialize cursors at the current channel heads. For a new dashboard that should import older Discord telemetry, set it to `true` before first start. Initial backfill stops after 100,000 messages per channel and logs a recovery error instead of skipping older records. If the bot cannot read a channel, its cursor stays put and it retries. Keep PostgreSQL enabled in production; memory mode is for local preview only.
 

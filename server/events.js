@@ -11,8 +11,11 @@ export function parseEvent(input) {
   if (input.details !== undefined && (typeof input.details !== 'string' || input.details.length > MAX.details)) return null
   if (input.source_id !== undefined &&
       (typeof input.source_id !== 'string' || !/^[A-Za-z0-9:_-]{1,100}$/.test(input.source_id))) return null
+  if (input.timestamp !== undefined && (typeof input.timestamp !== 'string' || input.timestamp.length > 40 ||
+      !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(input.timestamp) ||
+      !Number.isFinite(Date.parse(input.timestamp)) || Date.parse(input.timestamp) > Date.now() + 60_000)) return null
   return {
-    id: randomUUID(), team_id: input.team_id, timestamp: new Date().toISOString(),
+    id: randomUUID(), team_id: input.team_id, timestamp: input.timestamp ? new Date(input.timestamp).toISOString() : new Date().toISOString(),
     tool: input.tool.trim(), target: input.target.trim(), result: input.result.trim(),
     details: input.details || '', source_id: input.source_id || null,
   }
@@ -26,9 +29,10 @@ export function statusFromSummary(summary, now = Date.now()) {
 }
 
 export function updateSummary(previous, event) {
+  const newest = !previous || Date.parse(event.timestamp) >= Date.parse(previous.last_seen)
   return {
-    team_id: event.team_id, last_seen: event.timestamp,
-    last_action: `${event.tool} → ${event.target} [${event.result}]`,
+    team_id: event.team_id, last_seen: newest ? event.timestamp : previous.last_seen,
+    last_action: newest ? `${event.tool} → ${event.target} [${event.result}]` : previous.last_action,
     event_count: (previous?.event_count || 0) + 1,
     blocked_count: (previous?.blocked_count || 0) + (event.result.toUpperCase() === 'BLOCKED' ? 1 : 0),
   }
