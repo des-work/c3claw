@@ -7,6 +7,8 @@ import { initDb, insertEvent, getEvents, getTeamStatuses, getDiscordRejectionCou
 import { parseEvent, statusFromSummary, updateSummary } from './events.js'
 import { startBot, getBotHealth } from './bot.js'
 import { startBackendSync, getBackendSyncHealth } from './backend-sync.js'
+import { startEnrollmentSync, getEnrollmentSyncHealth, getEnrollmentInventory,
+  restoreEnrollmentInventory, mergeEnrollmentInventory } from './enrollment-sync.js'
 import { attachTopology, loadTopology, MACHINE_STATES, MACHINE_ZONES } from './topology.js'
 
 dotenv.config()
@@ -40,11 +42,15 @@ app.get('/api/health', async (req, res) => {
       discordStale || discord.failed_channels || discord.last_error)
     const health = { status: degraded ? 'degraded' : 'ok', persistence: useDb ? 'postgres' : 'memory',
       discord, backend_sync: getBackendSyncHealth(),
+      enrollment_sync: getEnrollmentSyncHealth(),
       discord_rejections: useDb ? await getDiscordRejectionCount() : 0 }
     const backend = health.backend_sync
     const backendStale = backend.last_success && Date.now() - Date.parse(backend.last_success) > 120_000
     if (backend.enabled && (!backend.last_success || backendStale || backend.last_error ||
       backend.pending_events > 1000)) health.status = 'degraded'
+    const enrollment = health.enrollment_sync
+    if (enrollment.enabled && (!enrollment.last_success || enrollment.last_error ||
+        Date.now() - Date.parse(enrollment.last_success) > 120_000)) health.status = 'degraded'
     res.status(health.status === 'degraded' ? 503 : 200).json(health)
   } catch (error) {
     res.status(503).json({ status: 'degraded', error: error.message })
@@ -56,7 +62,8 @@ app.get('/api/status', async (req, res) => {
   try {
     const summaries = useDb ? await getTeamStatuses() : [...memorySummary.values()]
     const observations = useDb ? await getMachineStatuses() : [...memoryMachines.values()]
-    res.json(attachTopology(summaries.map(summary => statusFromSummary(summary)), inventory, observations))
+    const combined = mergeEnrollmentInventory(inventory, getEnrollmentInventory())
+    res.json(attachTopology(summaries.map(summary => statusFromSummary(summary)), combined, observations))
   } catch (err) {
     console.error('/api/status error:', err.message)
     res.status(500).json({ error: err.message })
@@ -187,6 +194,7 @@ async function start() {
   if (process.env.BACKEND_EXPORT_URL && !process.env.BACKEND_EXPORT_SECRET) {
     throw new Error('BACKEND_EXPORT_SECRET is required when BACKEND_EXPORT_URL is set')
   }
+  await restoreEnrollmentInventory()
 
   app.listen(PORT, HOST, () => {
     console.log(`Server running on http://localhost:${PORT}`)
@@ -194,6 +202,7 @@ async function start() {
     if (!EVENT_API_KEY) console.warn('WARNING: EVENT_API_KEY is not set — POST /api/events is unauthenticated')
     startBot()
     startBackendSync()
+    startEnrollmentSync()
   })
 }
 

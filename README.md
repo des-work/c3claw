@@ -8,6 +8,8 @@ Operation Claw & Order is a high-density, single-page React application designed
 
 ## Features
 
+Student roster/Discord enrollment integration and its deployment/failure checks are documented in [Student enrollment feed](docs/STUDENT-ENROLLMENT.md). The Cyberlabs handoff is in the backend repository.
+
 - **Topology Gallery** — Scan each team's operator, WAN, DMZ, and LAN machines in a prominent card gallery
 - **Live Machine Monitoring** — Authenticated reports update color coded machine indicators; missing reports remain unknown
 - **Live Telemetry Stream** — A scrolling terminal-style activity feed showing the 20 most recent events with color-coded results (SUCCESS / FAILED / BLOCKED)

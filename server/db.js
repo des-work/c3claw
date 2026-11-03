@@ -73,6 +73,9 @@ export async function migrateDb() {
   await db.query(`CREATE TABLE IF NOT EXISTS backend_sync_cursors (
     source TEXT PRIMARY KEY, last_id BIGINT NOT NULL DEFAULT 0
   )`)
+  await db.query(`CREATE TABLE IF NOT EXISTS enrollment_snapshots (
+    source TEXT PRIMARY KEY, payload JSONB NOT NULL, fetched_at TIMESTAMPTZ NOT NULL
+  )`)
   console.log('PostgreSQL connected — events, summaries, and machines ready')
   return true
 }
@@ -88,6 +91,7 @@ export async function initDb() {
   await db.query('SELECT 1 FROM discord_cursors LIMIT 1')
   await db.query('SELECT 1 FROM discord_rejections LIMIT 1')
   await db.query('SELECT 1 FROM backend_sync_cursors LIMIT 1')
+  await db.query('SELECT 1 FROM enrollment_snapshots LIMIT 1')
   for (const index of ['events_source_id_unique', 'events_recent_idx']) {
     const { rows } = await db.query('SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass($1)', [index])
     if (rows[0]?.indisvalid !== true) throw new Error(`Missing or invalid ${index}; run npm run migrate`)
@@ -99,6 +103,18 @@ export async function getBackendCursor(source = 'scoring') {
   const { rows } = await getPool().query(
     'SELECT last_id FROM backend_sync_cursors WHERE source = $1', [source])
   return Number(rows[0]?.last_id || 0)
+}
+
+export async function getEnrollmentSnapshot() {
+  if (!getPool()) return null
+  const { rows } = await getPool().query("SELECT payload, fetched_at FROM enrollment_snapshots WHERE source = 'scoring'")
+  return rows[0] || null
+}
+
+export async function saveEnrollmentSnapshot(payload, fetchedAt) {
+  if (!getPool()) return
+  await getPool().query(`INSERT INTO enrollment_snapshots (source, payload, fetched_at) VALUES ('scoring', $1, $2)
+    ON CONFLICT (source) DO UPDATE SET payload = EXCLUDED.payload, fetched_at = EXCLUDED.fetched_at`, [JSON.stringify(payload), fetchedAt])
 }
 
 export async function saveBackendCursor(lastId, source = 'scoring') {

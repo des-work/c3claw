@@ -53,6 +53,9 @@ export function attachTopology(teams, inventory, observations, now = Date.now())
     }
     team.cidr ||= entry.cidr
     team.class_id = entry.class_id || team.class_id || null
+    for (const field of ['term_id', 'display_name', 'member_count']) {
+      if (entry[field] !== undefined) team[field] = entry[field]
+    }
     team.machines = entry.machines.map(machine => ({ ...machine, status: 'unknown', last_seen: null }))
     byTeam.set(entry.team_id, team)
   }
