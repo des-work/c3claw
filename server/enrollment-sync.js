@@ -1,4 +1,5 @@
 import { getEnrollmentSnapshot, saveEnrollmentSnapshot } from './db.js'
+import { backendUrl, boundedJson } from './backend-transport.js'
 
 const state = { enabled: false, last_success: null, last_error: null, teams: 0 }
 let inventory = []
@@ -48,30 +49,10 @@ export async function restoreEnrollmentInventory() {
 }
 
 export async function syncEnrollmentOnce({ baseUrl, secret, fetchFn = fetch, save = saveEnrollmentSnapshot }) {
-  const url = new URL('/api/admin/enrollment/teams/export', baseUrl)
-  const response = await fetchFn(url, { headers: { 'X-Export-Secret': secret }, signal: AbortSignal.timeout(10_000) })
+  const url = backendUrl(baseUrl, '/api/admin/enrollment/teams/export')
+  const response = await fetchFn(url, { headers: { 'X-Export-Secret': secret }, signal: AbortSignal.timeout(10_000), redirect: 'error' })
   if (!response.ok) throw new Error(`Enrollment export returned HTTP ${response.status}`)
-  const reader = response.body.getReader()
-  const chunks = []
-  let size = 0
-  try {
-    while (true) {
-      const { value, done } = await reader.read()
-      if (done) break
-      size += value.byteLength
-      if (size > 2 * 1024 * 1024) throw new Error('Enrollment export exceeds 2 MiB')
-      chunks.push(Buffer.from(value))
-    }
-  } finally {
-    await reader.cancel()
-  }
-  let decoded
-  try {
-    decoded = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-  } catch {
-    // JSON parser errors can quote response content; never publish it in health/logs.
-    throw new Error('Enrollment export is not valid JSON')
-  }
+  const decoded = await boundedJson(response, 'Enrollment export', 2 * 1024 * 1024)
   const payload = parseEnrollmentSnapshot(decoded)
   const fetchedAt = new Date().toISOString()
   await save(payload, fetchedAt)

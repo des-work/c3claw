@@ -4,7 +4,7 @@ const ID = /^[A-Za-z0-9_-]{1,64}$/
 const MAX = { tool: 100, target: 200, result: 40, details: 2000 }
 
 export function parseEvent(input) {
-  if (!input || typeof input !== 'object' || !ID.test(input.team_id || '')) return null
+  if (!input || typeof input !== 'object' || typeof input.team_id !== 'string' || !ID.test(input.team_id)) return null
   for (const field of ['tool', 'target', 'result']) {
     if (typeof input[field] !== 'string' || !input[field].trim() || input[field].length > MAX[field]) return null
   }

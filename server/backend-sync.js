@@ -1,5 +1,6 @@
 import { parseEvent } from './events.js'
 import { getBackendCursor, saveBackendCursor, insertEvent } from './db.js'
+import { backendUrl, boundedJson } from './backend-transport.js'
 
 const state = { enabled: false, last_success: null, last_error: null,
   cursor: 0, source_head_id: 0, pending_events: 0, imported: 0 }
@@ -27,15 +28,15 @@ export async function syncBackendOnce({ baseUrl, secret, fetchFn = fetch,
   let sourceHead = cursor
   let pendingEvents = 0
   for (let page = 0; page < maxPages; page++) {
-    const url = new URL('/api/admin/events/export', baseUrl)
+    const url = backendUrl(baseUrl, '/api/admin/events/export')
     url.searchParams.set('limit', '500')
     const response = await fetchFn(url, {
-      headers: { 'X-Export-Secret': secret }, signal: AbortSignal.timeout(10_000),
+      headers: { 'X-Export-Secret': secret }, signal: AbortSignal.timeout(10_000), redirect: 'error',
     })
     if (!response.ok) throw new Error(`Backend export returned HTTP ${response.status}`)
-    const batch = await response.json()
+    const batch = await boundedJson(response, 'Backend export')
     if (!Array.isArray(batch.events) || typeof batch.has_more !== 'boolean' ||
-        !Number.isSafeInteger(batch.pending) || batch.pending < batch.events.length) {
+        batch.events.length > 500 || !Number.isSafeInteger(batch.pending) || batch.pending < batch.events.length) {
       throw new Error('Malformed backend export response')
     }
     if (Number.isSafeInteger(batch.head_id)) sourceHead = Math.max(sourceHead, batch.head_id)
@@ -52,11 +53,12 @@ export async function syncBackendOnce({ baseUrl, secret, fetchFn = fetch,
       previousId = item.id
     }
     if (batch.events.length) {
-      const ackUrl = new URL('/api/admin/events/ack', baseUrl)
+      const ackUrl = backendUrl(baseUrl, '/api/admin/events/ack')
       const acknowledgement = await fetchFn(ackUrl, {
         method: 'POST', headers: { 'X-Export-Secret': secret, 'Content-Type': 'application/json' },
         body: JSON.stringify({ event_ids: batch.events.map(item => item.id) }),
         signal: AbortSignal.timeout(10_000),
+        redirect: 'error',
       })
       if (!acknowledgement.ok) throw new Error(`Backend acknowledgement returned HTTP ${acknowledgement.status}`)
       const highest = batch.events.at(-1).id

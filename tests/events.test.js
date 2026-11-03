@@ -79,10 +79,10 @@ test('scoring event delivery stores before acknowledgement and preserves origina
         assert.equal(ingested.length, 1)
         return { ok: true }
       }
-      return { ok: true, json: async () => ({
+      return Response.json({
         events: [{ ...base, id: 1, technique: 'heartbeat' }, { ...base, id: 2 }],
         head_id: 2, pending: 2, has_more: false,
-      }) }
+      })
     },
   })
   assert.deepEqual(result, { cursor: 2, sourceHead: 2, pendingEvents: 0, imported: 1 })
@@ -99,10 +99,10 @@ test('scoring delivery remains unacknowledged when an event fails to store', asy
     ingest: async () => { throw new Error('database unavailable') },
     fetchFn: async (url, options) => {
       if (options.method === 'POST') acknowledged = true
-      return { ok: true, json: async () => ({ events: [{
+      return Response.json({ events: [{
       id: 1, team_id: 'Brown_01', timestamp: '2026-11-02T12:00:00Z',
       technique: 'port_scan', target_ip: '10.50.1.1', result: 'success', phase: 1,
-    }], pending: 1, has_more: false }) }
+    }], pending: 1, has_more: false })
     },
   }), /database unavailable/)
   assert.equal(saved, false)
@@ -115,10 +115,10 @@ test('a late lower ID is imported even after a higher ID was acknowledged', asyn
     getCursor: async () => 20, saveCursor: async () => { throw new Error('cursor should not move') },
     ingest: async event => { ingested.push(event.source_id); return { duplicate: false } },
     fetchFn: async (url, options) => options.method === 'POST' ? { ok: true } :
-      { ok: true, json: async () => ({ events: [{
+      Response.json({ events: [{
         id: 10, team_id: 'Brown_01', timestamp: '2026-11-02T12:00:00Z',
         technique: 'port_scan', target_ip: '10.50.1.1', result: 'success', phase: 1,
-      }], head_id: 20, pending: 1, has_more: false }) },
+      }], head_id: 20, pending: 1, has_more: false }),
   })
   assert.deepEqual(ingested, ['backend:10'])
   assert.equal(result.pendingEvents, 0)

@@ -128,7 +128,8 @@ export async function upsertMachineStatus(machine) {
     VALUES ($1, $2, $3, $4, $5, $6, $7)
     ON CONFLICT (team_id, machine_id) DO UPDATE SET
       label = EXCLUDED.label, zone = EXCLUDED.zone, address = EXCLUDED.address,
-      status = EXCLUDED.status, last_seen = EXCLUDED.last_seen`,
+      status = EXCLUDED.status, last_seen = EXCLUDED.last_seen
+    WHERE EXCLUDED.last_seen >= machine_status.last_seen`,
   [machine.team_id, machine.machine_id, machine.label, machine.zone,
     machine.address, machine.status, machine.last_seen])
 }
