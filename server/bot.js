@@ -2,10 +2,6 @@ import { Client, GatewayIntentBits } from 'discord.js'
 import { getPool, getDiscordCursor, saveDiscordCursor, recordDiscordRejection } from './db.js'
 
 const MESSAGE_PREFIX = '[OCRT]'
-const DEFAULT_CHANNELS = [
-  '1492978716815655137', '1493081326130040863', '1493081407726161970',
-  '1493081431386099862', '1493081451275485275',
-]
 const botState = { connected: false, last_sync: null, last_error: null, channels: 0 }
 const channelSync = new Map()
 const channelErrors = new Map()
@@ -68,8 +64,8 @@ export function startBot() {
     console.error('EVENT_API_KEY is required for Discord import')
     return
   }
-  const channels = new Set((process.env.ALLOWED_CHANNELS
-    ? process.env.ALLOWED_CHANNELS.split(',') : DEFAULT_CHANNELS).map(id => id.trim()).filter(Boolean))
+  const channels = new Set((process.env.ALLOWED_CHANNELS || '').split(',').map(id => id.trim()).filter(Boolean))
+  if (!channels.size) throw new Error('Discord import requires explicit ALLOWED_CHANNELS')
   if ([...channels].some(id => !/^\d{15,22}$/.test(id))) throw new Error('ALLOWED_CHANNELS contains an invalid Discord channel ID')
   botState.channels = channels.size
   const cursors = new Map()

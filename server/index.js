@@ -7,7 +7,6 @@ import { initDb, insertEvent, getEvents, getTeamStatuses, getDiscordRejectionCou
 import { parseEvent, statusFromSummary, updateSummary } from './events.js'
 import { startBot, getBotHealth } from './bot.js'
 import { startBackendSync, getBackendSyncHealth } from './backend-sync.js'
-import { seedEvents } from './seed.js'
 import { attachTopology, loadTopology, MACHINE_STATES, MACHINE_ZONES } from './topology.js'
 
 dotenv.config()
@@ -22,6 +21,7 @@ if (corsOrigins.length) app.use(cors({ origin: corsOrigins, methods: ['GET', 'PO
 app.use(express.json())
 
 const PORT = process.env.PORT || 3001
+const HOST = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1')
 const EVENT_API_KEY = process.env.EVENT_API_KEY || ''
 const inventory = loadTopology()
 
@@ -159,21 +159,7 @@ app.post('/api/events', async (req, res) => {
   }
 })
 
-// ── DEV ONLY ──────────────────────────────────────────────────────────────────
-// POST /api/seed  — loads mock events into the in-memory store for UI testing.
-// Blocked in production so it can never be accidentally deployed live.
-// ──────────────────────────────────────────────────────────────────────────────
-app.post('/api/seed', (req, res) => {
-  if (process.env.NODE_ENV === 'production') {
-    return res.status(403).json({ error: 'Seed endpoint is disabled in production' })
-  }
-  for (const event of seedEvents) {
-    memoryEvents.push(event)
-    memorySummary.set(event.team_id, updateSummary(memorySummary.get(event.team_id), event))
-  }
-  console.log(`[seed] Loaded ${seedEvents.length} mock events into memory store`)
-  res.json({ seeded: seedEvents.length })
-})
+app.use('/api', (req, res) => res.status(404).json({ error: 'Unknown API endpoint' }))
 
 // Serve the built frontend
 app.use(express.static(path.join(__dirname, '../dist')))
@@ -202,7 +188,7 @@ async function start() {
     throw new Error('BACKEND_EXPORT_SECRET is required when BACKEND_EXPORT_URL is set')
   }
 
-  app.listen(PORT, () => {
+  app.listen(PORT, HOST, () => {
     console.log(`Server running on http://localhost:${PORT}`)
     console.log(`Persistence: ${useDb ? 'PostgreSQL' : 'in-memory (events lost on restart)'}`)
     if (!EVENT_API_KEY) console.warn('WARNING: EVENT_API_KEY is not set — POST /api/events is unauthenticated')

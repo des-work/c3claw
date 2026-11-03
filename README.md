@@ -56,7 +56,7 @@ operation-claw-and-order/
 └── src/
     ├── main.jsx                # React entry point
     ├── index.css               # Tailwind directives + scrollbar styles
-    ├── mockData.js             # Synthetic teams, machines, and events
+    ├── hooks/                  # API polling; empty until live data arrives
     ├── components/
     │   ├── App.jsx             # Root layout orchestrator
     │   ├── HeaderBar.jsx       # Title, fleet metric, clock, status badge
@@ -128,7 +128,7 @@ heroku logs --tail
 
 | Variable            | Required | Description                                                       |
 | ------------------- | -------- | ----------------------------------------------------------------- |
-| `VITE_API_URL`      | Yes*     | Backend URL for the frontend to call. If empty, uses mock data    |
+| `VITE_API_URL` | Optional | API origin; empty uses the dashboard origin |
 | `EVENT_API_KEY`     | Yes for machine health | Bearer token for `POST /api/machines/heartbeat`; also protects event ingestion |
 | `TOPOLOGY_FILE`     | Optional | Path to JSON team/machine inventory. Omit to show only machines that report in. |
 | `TOPOLOGY_JSON`     | Optional | Inline inventory JSON for deployments without a local inventory file; takes precedence over `TOPOLOGY_FILE`. |
@@ -144,7 +144,7 @@ heroku logs --tail
 | `PORT`              | No       | Server port (Heroku sets this automatically; defaults to 3001)    |
 | `NPM_CONFIG_PRODUCTION` | Yes  | Must be `false` so Heroku installs devDependencies for the build  |
 
-*If `VITE_API_URL` is not set, the dashboard runs in mock mode with synthetic data.
+*If `VITE_API_URL` is not set, the dashboard calls its own origin. Start the local API on port 3001 for Vite development.
 
 ---
 
@@ -167,7 +167,7 @@ cp .env.example .env
 ### Running locally
 
 ```bash
-# Frontend only (mock mode, port 5173)
+# Frontend (port 5173; requires the local API on port 3001)
 npm run dev
 
 # Backend only (port 3001)
@@ -182,7 +182,7 @@ npm run server
 npm run build-start
 ```
 
-With `VITE_API_URL` unset the frontend uses synthetic mock data. Set `VITE_API_URL=http://localhost:3001` to inspect live data from the local server.
+With `VITE_API_URL` unset, Vite proxies `/api` to the local server on port 3001. No synthetic data is loaded.
 
 ---
 
@@ -260,11 +260,11 @@ curl -X POST https://your-app.herokuapp.com/api/events \
 
 ### Mock Mode (default)
 
-When `VITE_API_URL` is not set, the dashboard renders synthetic teams, topology nodes, and events from `mockData.js`. New mock events are generated every 4 seconds, and online team statuses refresh every 15 seconds. Mock indicators are for preview only.
+When `VITE_API_URL` is not set, the dashboard reads `/api` from its own origin. Vite forwards those requests to port 3001 during development. The dashboard starts empty and never substitutes simulated teams or events. Legacy synthetic fixtures are preserved in `archive/legacy-preview/`.
 
 ### Live API Mode
 
-When `VITE_API_URL` is set, the hook polls the backend:
+The hook polls the configured API (same origin by default):
 
 | Endpoint          | Poll Interval | Description                    |
 | ----------------- | ------------- | ------------------------------ |

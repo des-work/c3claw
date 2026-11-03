@@ -8,7 +8,7 @@ This dashboard shows team topology and machine reports, imports scored events fr
 | --- | --- | --- |
 | `DATABASE_URL` | Always | PostgreSQL URL; connection succeeds with verified TLS. For private CA, set `PG_CA_CERT_FILE` to a readable PEM file. |
 | `EVENT_API_KEY` | Always | Long random bearer secret for event and machine writes. |
-| `VITE_API_URL` | Always | Set to this dashboard's public origin **before build**; empty enables mock mode. |
+| `VITE_API_URL` | Only for a separate API origin | Set before build when using a different API origin; empty uses the dashboard’s own origin. No mock fallback exists. |
 | `TOPOLOGY_JSON` or `TOPOLOGY_FILE` | For intended gallery | Every class/team/machine appears once with backend matching team IDs. |
 | `BACKEND_EXPORT_URL` and `BACKEND_EXPORT_SECRET` | For scored event feed | Backend base URL and backend read-only `EVENT_EXPORT_SECRET`. Both must be set together. Dashboard health shows queue depth and errors. |
 | `DISCORD_BOT_TOKEN`, `ALLOWED_CHANNELS` | For distinct Discord telemetry | Explicit comma separated channel IDs. Bot needs View Channel, Read Message History, and Message Content intent. |

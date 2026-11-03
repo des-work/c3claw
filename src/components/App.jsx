@@ -6,11 +6,12 @@ import ActivityFeed from './ActivityFeed';
 import { Network } from 'lucide-react';
 
 const App = () => {
-  const { teams, events, loading, error, isMock } = useDashboardData();
+  const { teams, events, loading, error } = useDashboardData();
 
   // Compute the top-level operating status for the entire simulation
   const overallStatus = useMemo(() => {
-    if (!teams || teams.length === 0) return 'UNKNOWN';
+    if (error) return 'TELEMETRY UNAVAILABLE';
+    if (!teams || teams.length === 0) return 'AWAITING TELEMETRY';
     const states = teams.flatMap(team => [team.status, ...(team.machines || []).map(machine => machine.status)]);
     const hasOffline = states.includes('offline');
     const hasDegraded = states.includes('degraded') || states.includes('idle');
@@ -19,7 +20,7 @@ const App = () => {
     if (hasDegraded) return 'DEGRADED';
     if (states.includes('unknown') || teams.some(team => !team.machines?.length)) return 'UNKNOWN';
     return 'ALL SYSTEMS GO';
-  }, [teams]);
+  }, [teams, error]);
 
   if (loading) {
     return (
@@ -39,7 +40,7 @@ const App = () => {
       <div className="dashboard-main flex-1 min-h-0 p-3 md:p-5">
         <div className="h-full min-h-0">
           {error && <div className="topology-error" role="alert">Telemetry refresh unavailable: {error}. Showing the last received snapshot.</div>}
-          <TopologyGallery teams={teams} isMock={isMock} />
+          <TopologyGallery teams={teams} />
         </div>
       </div>
 

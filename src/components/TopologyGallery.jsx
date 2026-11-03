@@ -84,7 +84,7 @@ function TopologyCard({ team }) {
   )
 }
 
-export default function TopologyGallery({ teams = [], isMock = false }) {
+export default function TopologyGallery({ teams = [] }) {
   const [search, setSearch] = useState('')
   const [selectedClass, setSelectedClass] = useState('ALL')
   const classes = useMemo(() => ['ALL', ...[...new Set(teams.map(team => team.class_id || professorOf(team.team_id))
@@ -117,13 +117,13 @@ export default function TopologyGallery({ teams = [], isMock = false }) {
       </div>
       <div className="topology-gallery__legend" aria-label="Machine status legend">
         {STATES.map(state => <span key={state} className={`status--${state}`}><i className="status-dot" />{state}</span>)}
-        <span className="topology-gallery__source">{isMock ? 'Preview data · simulated machine states' : 'Machine state comes from authenticated health reports'}</span>
+        <span className="topology-gallery__source">Machine state comes from authenticated health reports</span>
       </div>
       <div className="topology-gallery__scroll">
         {filtered.length ? <div className="topology-gallery__grid">
           {filtered.map(team => <TopologyCard key={team.team_id} team={team} />)}
         </div> : <div className="topology-gallery__empty">
-          {teams.length ? 'No teams match this filter' : 'No team telemetry or topology configured'}
+          {teams.length ? 'No teams match this filter' : <div><strong>Awaiting this semester’s teams</strong><p>Teams and machines will appear when inventory or live reports arrive.</p><p>No sample activity is loaded.</p></div>}
         </div>}
       </div>
     </section>
