@@ -86,7 +86,7 @@ function TopologyCard({ team }) {
   )
 }
 
-export default function TopologyGallery({ teams = [], policy = STANDARD_POLICY, generatedAt = null }) {
+export default function TopologyGallery({ teams = [], policy = STANDARD_POLICY, generatedAt = null, pipelineHealth = null }) {
   const [search, setSearch] = useState('')
   const [selectedClass, setSelectedClass] = useState('ALL')
   const classes = useMemo(() => ['ALL', ...[...new Set(teams.map(team => team.class_id || professorOf(team.team_id))
@@ -105,6 +105,7 @@ export default function TopologyGallery({ teams = [], policy = STANDARD_POLICY, 
           <h2>Team topologies</h2>
           <p>{teams.length} teams · {machineCount} mapped machines · refresh every {refreshSeconds(policy.refresh_seconds) / 60} min</p>
           <p>Snapshot: {generatedAt ? new Date(generatedAt).toLocaleTimeString() : 'awaiting data'} · Standard reporting</p>
+          {pipelineHealth?.status === 'degraded' && <p role="status">Source feed needs setup or repair. Check service health.</p>}
         </div>
         <div className="topology-gallery__tools">
           <label className="topology-gallery__search">

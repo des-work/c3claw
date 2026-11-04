@@ -30,8 +30,7 @@ const App = () => {
       <div className="dashboard-main flex-1 min-h-0 p-3 md:p-5">
         <div className="h-full min-h-0">
           {error && <div className="topology-error" role="alert">Telemetry refresh unavailable: {error}. Showing the last received snapshot.</div>}
-          {!error && pipelineHealth?.status === 'degraded' && <div className="topology-error" role="status">Source feed needs attention. Check service health before relying on this snapshot.</div>}
-          <TopologyGallery teams={teams} policy={policy} generatedAt={generatedAt} />
+          <TopologyGallery teams={teams} policy={policy} generatedAt={generatedAt} pipelineHealth={pipelineHealth} />
         </div>
       </div>
 
