@@ -15,6 +15,7 @@ function snapshotJson(body, request) {
   const privateRequest = ['authorization', 'cookie', 'cf-access-jwt-assertion'].some(name => request.headers.has(name))
   return Response.json(body, { headers: { ...securityHeaders,
     'Cache-Control': privateRequest ? 'private, no-store' : `public, max-age=${STANDARD_POLICY.cache_seconds}, must-revalidate`,
+    Vary: 'Cookie, Authorization, Cf-Access-Jwt-Assertion',
     'X-Snapshot-At': body.generated_at || new Date().toISOString(),
   } })
 }

@@ -184,6 +184,7 @@ test('combined snapshot includes standard timing, source health, shared-cache he
   const response = await mf.dispatchFetch('https://test.invalid/api/dashboard')
   assert.equal(response.status, 200)
   assert.equal(response.headers.get('cache-control'), 'public, max-age=60, must-revalidate')
+  assert.equal(response.headers.get('vary'), 'Cookie, Authorization, Cf-Access-Jwt-Assertion')
   const snapshot = await response.json()
   assert.equal(snapshot.policy.refresh_seconds, 300)
   assert.equal(snapshot.policy.heartbeat_seconds, 300)
