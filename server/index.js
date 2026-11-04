@@ -10,6 +10,7 @@ import { startBackendSync, getBackendSyncHealth } from './backend-sync.js'
 import { startEnrollmentSync, getEnrollmentSyncHealth, getEnrollmentInventory,
   restoreEnrollmentInventory, mergeEnrollmentInventory } from './enrollment-sync.js'
 import { attachTopology, loadTopology, MACHINE_STATES, MACHINE_ZONES } from './topology.js'
+import { STANDARD_POLICY, machineFreshness } from '../shared/refresh-policy.js'
 
 dotenv.config()
 
@@ -54,6 +55,22 @@ app.get('/api/health', async (req, res) => {
     res.status(health.status === 'degraded' ? 503 : 200).json(health)
   } catch (error) {
     res.status(503).json({ status: 'degraded', error: error.message })
+  }
+})
+
+// Same bounded snapshot contract for local/legacy development.
+app.get('/api/dashboard', async (req, res) => {
+  try {
+    const summaries = useDb ? await getTeamStatuses() : [...memorySummary.values()]
+    const observations = useDb ? await getMachineStatuses() : [...memoryMachines.values()]
+    const combined = mergeEnrollmentInventory(inventory, getEnrollmentInventory())
+    const teams = attachTopology(summaries.map(summary => statusFromSummary(summary)), combined,
+      observations, Date.now(), machineFreshness())
+    const events = useDb ? await getEvents(20) : memoryEvents.slice(-20)
+    res.set('Cache-Control', 'no-store').json({ generated_at: new Date().toISOString(),
+      policy: STANDARD_POLICY, teams, events, health: null })
+  } catch {
+    res.status(503).json({ error: 'Dashboard snapshot unavailable' })
   }
 })
 

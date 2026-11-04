@@ -9,13 +9,14 @@ export default defineConfig({
     compatibilityFlags: ['nodejs_compat'],
     workersDev: true,
     previewUrls: false,
+    cache: { enabled: true, crossVersionCache: false },
     assets: { notFoundHandling: 'single-page-application', runWorkerFirst: ['/api', '/api/*'] },
     observability: {
       enabled: true, redactQueryString: true,
       logs: { enabled: true, headSamplingRate: 1 },
       traces: { enabled: true, headSamplingRate: 0.01 },
     },
-    triggers: [triggers.scheduled({ schedule: '* * * * *' })],
+    triggers: [triggers.scheduled({ schedule: '*/5 * * * *' })],
     env: {
       DB: bindings.d1({ name: 'claw-and-order', id: '1b405da4-cdc6-4087-8194-295f22f8b74a' }),
       ASSETS: bindings.assets(),

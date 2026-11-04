@@ -5,11 +5,19 @@ import { mergeEnrollmentInventory, parseEnrollmentSnapshot } from '../shared/enr
 import { Store } from './store.js'
 import { syncDiscord, discordHealth } from './discord.js'
 import { syncBackend } from './backend.js'
+import { STANDARD_POLICY, machineFreshness } from '../shared/refresh-policy.js'
 
 const MAX_BODY = 16_384
 const ID = /^[A-Za-z0-9_-]{1,64}$/
 const securityHeaders = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' }
 function json(body, status = 200) { return Response.json(body, { status, headers: securityHeaders }) }
+function snapshotJson(body, request) {
+  const privateRequest = ['authorization', 'cookie', 'cf-access-jwt-assertion'].some(name => request.headers.has(name))
+  return Response.json(body, { headers: { ...securityHeaders,
+    'Cache-Control': privateRequest ? 'private, no-store' : `public, max-age=${STANDARD_POLICY.cache_seconds}, must-revalidate`,
+    'X-Snapshot-At': body.generated_at || new Date().toISOString(),
+  } })
+}
 function authorized(request, secret) {
   const actual = request.headers.get('authorization') || ''
   if (!secret || actual.length > 1024) return false
@@ -62,7 +70,7 @@ export async function health(store, env) {
   const backend = env.TELEMETRY_SOURCE === 'backend' ? (await store.state('backend') || { enabled: true }) : { enabled: false }
   const enrollment = env.BACKEND_EXPORT_URL ? (await store.state('enrollment') || { enabled: true }) : { enabled: false }
   const problems = []
-  const stale = value => !value || !Number.isFinite(Date.parse(value)) || Date.now() - Date.parse(value) > 180_000
+  const stale = value => !value || !Number.isFinite(Date.parse(value)) || Date.now() - Date.parse(value) > STANDARD_POLICY.sync_stale_after_seconds * 1000
   if (!env.EVENT_API_KEY) problems.push('event_api_key_missing')
   if (!['discord', 'backend'].includes(env.TELEMETRY_SOURCE)) problems.push('telemetry_source_missing')
   if (env.TELEMETRY_SOURCE === 'discord' && (!discord.configured || discord.failed_channels ||
@@ -73,12 +81,27 @@ export async function health(store, env) {
   const count = await store.first('SELECT COUNT(*) AS count FROM discord_rejections')
   return { status: problems.length ? 'degraded' : 'ok', persistence: 'd1', hosting: 'cloudflare-workers',
     release: env.RELEASE_ID || 'unknown', semester_start_at: env.SEMESTER_START_AT,
-    problems, discord, backend_sync: backend, enrollment_sync: enrollment, discord_rejections: count.count }
+    policy: STANDARD_POLICY, problems, discord, backend_sync: backend, enrollment_sync: enrollment, discord_rejections: count.count }
+}
+
+async function teamsFor(store, env) {
+  const [summaries, machines, saved] = await Promise.all([
+    store.rows('SELECT * FROM team_status ORDER BY team_id'),
+    store.rows('SELECT * FROM machine_status ORDER BY team_id, machine_id'), store.snapshot(),
+  ])
+  const enrollment = saved ? parseEnrollmentSnapshot(saved.payload).teams : []
+  return attachTopology(summaries.map(summary => statusFromSummary(summary)),
+    mergeEnrollmentInventory(topology(env), enrollment), machines, Date.now(), machineFreshness())
 }
 
 export async function handleApi(request, env) {
   const url = new URL(request.url)
   const store = new Store(env.DB)
+  if (request.method === 'GET' && url.pathname === '/api/dashboard') {
+    const [teams, events, pipelineHealth] = await Promise.all([teamsFor(store, env), store.recent(20), health(store, env)])
+    return snapshotJson({ generated_at: new Date().toISOString(), policy: STANDARD_POLICY,
+      teams, events, health: pipelineHealth }, request)
+  }
   if (request.method === 'GET' && url.pathname === '/api/health') {
     const body = await health(store, env)
     return json(body, body.status === 'ok' ? 200 : 503)
@@ -86,16 +109,10 @@ export async function handleApi(request, env) {
   if (request.method === 'GET' && url.pathname === '/api/events') {
     const requested = Number(url.searchParams.get('limit'))
     const limit = Number.isInteger(requested) && requested >= 1 ? Math.min(requested, 100) : 100
-    return json(await store.recent(limit))
+    return snapshotJson(await store.recent(limit), request)
   }
   if (request.method === 'GET' && url.pathname === '/api/status') {
-    const [summaries, machines, saved] = await Promise.all([
-      store.rows('SELECT * FROM team_status ORDER BY team_id'),
-      store.rows('SELECT * FROM machine_status ORDER BY team_id, machine_id'), store.snapshot(),
-    ])
-    const enrollment = saved ? parseEnrollmentSnapshot(saved.payload).teams : []
-    return json(attachTopology(summaries.map(summary => statusFromSummary(summary)),
-      mergeEnrollmentInventory(topology(env), enrollment), machines))
+    return snapshotJson(await teamsFor(store, env), request)
   }
   if (request.method === 'POST' && ['/api/events', '/api/machines/heartbeat'].includes(url.pathname)) {
     if (!env.EVENT_API_KEY) return json({ error: 'Event ingestion is not configured' }, 503)
@@ -123,7 +140,10 @@ export async function handleApi(request, env) {
     const machine = { team_id, machine_id, label: label || configured?.label || machine_id,
       zone: configured?.zone || zone, address: address || configured?.address || null,
       status, last_seen: new Date().toISOString() }
-    await store.heartbeat(machine)
+    const receipt = await store.heartbeat(machine, STANDARD_POLICY.heartbeat_seconds)
+    if (!receipt.meta.changes) return Response.json({ error: 'Standard reporting allows one heartbeat per machine every five minutes',
+      retry_after_seconds: STANDARD_POLICY.heartbeat_seconds }, { status: 429,
+      headers: { ...securityHeaders, 'Retry-After': String(STANDARD_POLICY.heartbeat_seconds) } })
     return json(machine, 201)
   }
   return json({ error: 'Unknown API endpoint or method' }, 404)

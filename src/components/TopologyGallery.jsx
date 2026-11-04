@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Network, Search } from 'lucide-react'
+import { STANDARD_POLICY, refreshSeconds } from '../../shared/refresh-policy.js'
 
 const ZONES = [
   { id: 'operator', label: 'Operator' },
@@ -27,6 +28,7 @@ function Machine({ machine }) {
         <strong title={machine.label || machine.machine_id}>{machine.label || machine.machine_id}</strong>
         <small title={machine.address || 'No address'}>{machine.address || 'Address unlisted'}</small>
         <span className="machine__state" title={`Last report: ${seen}`}>{state}</span>
+        <small>Report: {seen}</small>
       </div>
     </div>
   )
@@ -84,7 +86,7 @@ function TopologyCard({ team }) {
   )
 }
 
-export default function TopologyGallery({ teams = [] }) {
+export default function TopologyGallery({ teams = [], policy = STANDARD_POLICY, generatedAt = null }) {
   const [search, setSearch] = useState('')
   const [selectedClass, setSelectedClass] = useState('ALL')
   const classes = useMemo(() => ['ALL', ...[...new Set(teams.map(team => team.class_id || professorOf(team.team_id))
@@ -99,9 +101,10 @@ export default function TopologyGallery({ teams = [] }) {
     <section className="topology-gallery" aria-label="Team network topology gallery">
       <div className="topology-gallery__header">
         <div className="topology-gallery__intro">
-          <div className="topology-gallery__kicker"><Network size={15} aria-hidden="true" /> LIVE NETWORK OVERVIEW</div>
+          <div className="topology-gallery__kicker"><Network size={15} aria-hidden="true" /> NETWORK STATUS SNAPSHOT</div>
           <h2>Team topologies</h2>
-          <p>{teams.length} teams · {machineCount} mapped machines · updates every 15s</p>
+          <p>{teams.length} teams · {machineCount} mapped machines · refresh every {refreshSeconds(policy.refresh_seconds) / 60} min</p>
+          <p>Snapshot: {generatedAt ? new Date(generatedAt).toLocaleTimeString() : 'awaiting data'} · Standard reporting</p>
         </div>
         <div className="topology-gallery__tools">
           <label className="topology-gallery__search">
@@ -117,7 +120,7 @@ export default function TopologyGallery({ teams = [] }) {
       </div>
       <div className="topology-gallery__legend" aria-label="Machine status legend">
         {STATES.map(state => <span key={state} className={`status--${state}`}><i className="status-dot" />{state}</span>)}
-        <span className="topology-gallery__source">Machine state comes from authenticated health reports</span>
+        <span className="topology-gallery__source">Health reports every {policy.heartbeat_seconds / 60} min · degraded after {policy.degraded_after_seconds / 60} min · offline after {policy.offline_after_seconds / 60} min</span>
       </div>
       <div className="topology-gallery__scroll">
         {filtered.length ? <div className="topology-gallery__grid">

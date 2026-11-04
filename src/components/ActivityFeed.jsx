@@ -20,7 +20,7 @@ const ActivityFeed = ({ events }) => {
       {/* 1. Header Ribbon */}
       <div className="h-8 border-b-[2px] border-surface/80 bg-surface/30 flex items-center px-4 gap-2 shrink-0 text-muted uppercase text-xs tracking-[0.2em] font-bold shadow-sm z-10">
         <Activity className="w-3.5 h-3.5 text-primary" />
-        Live Telemetry Feed
+        Telemetry Snapshot
         <span className="ml-auto text-[10px] opacity-50">MAX_EVENTS: 20</span>
       </div>
 

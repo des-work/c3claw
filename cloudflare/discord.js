@@ -96,7 +96,7 @@ export async function pollChannel(store, env, row, sources, fetchFn = fetch) {
     await store.run('UPDATE discord_cursors SET scan_head=?, scan_before=?, scan_complete=0 WHERE channel_id=?',
       row.scan_head, row.scan_before, channel)
   }
-  // Bound the scan and persist progress. A huge gap resumes next minute.
+  // Bound the scan and persist progress. A huge gap resumes next scheduled run.
   if (!row.scan_complete) {
     const messages = validateMessages(await discordGet(
       `/channels/${channel}/messages?limit=100&before=${row.scan_before}`, env, fetchFn), channel)

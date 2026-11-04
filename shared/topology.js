@@ -30,16 +30,16 @@ export function parseTopology(parsed) {
   })
 }
 
-export function machineState(machine, now = Date.now()) {
+export function machineState(machine, now = Date.now(), freshness = {}) {
   if (!machine.last_seen) return 'unknown'
   const age = now - Date.parse(machine.last_seen)
   if (!Number.isFinite(age)) return 'unknown'
-  if (machine.status === 'offline' || age > OFFLINE_AFTER_MS) return 'offline'
-  if (machine.status === 'degraded' || age > DEGRADED_AFTER_MS) return 'degraded'
+  if (machine.status === 'offline' || age > (freshness.offlineAfterMs ?? OFFLINE_AFTER_MS)) return 'offline'
+  if (machine.status === 'degraded' || age > (freshness.degradedAfterMs ?? DEGRADED_AFTER_MS)) return 'degraded'
   return 'online'
 }
 
-export function attachTopology(teams, inventory, observations, now = Date.now()) {
+export function attachTopology(teams, inventory, observations, now = Date.now(), freshness = {}) {
   const byTeam = new Map(teams.map(team => [team.team_id, { ...team, machines: [] }]))
 
   for (const entry of inventory) {
@@ -69,7 +69,8 @@ export function attachTopology(teams, inventory, observations, now = Date.now())
         ? existing.label : (observation.label || existing.label || observation.machine_id),
       zone: existing.zone || observation.zone,
       address: observation.address || existing.address || null,
-      status: machineState(observation, now),
+      reported_status: observation.status,
+      status: machineState(observation, now, freshness),
     }
     if (index < 0) team.machines.push(machine)
     else team.machines[index] = machine

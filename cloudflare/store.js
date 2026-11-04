@@ -83,11 +83,12 @@ export class Store {
       this.statement('DELETE FROM discord_inbox WHERE channel_id=? AND message_key<=?', channel, snowflakeKey(messageId)),
     ])
   }
-  async heartbeat(machine) {
-    await this.run(`INSERT INTO machine_status VALUES (?, ?, ?, ?, ?, ?, ?)
+  async heartbeat(machine, minimumSeconds = 0) {
+    return this.run(`INSERT INTO machine_status VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(team_id, machine_id) DO UPDATE SET label=excluded.label, zone=excluded.zone,
         address=excluded.address, status=excluded.status, last_seen=excluded.last_seen
-      WHERE excluded.last_seen >= machine_status.last_seen`,
-    machine.team_id, machine.machine_id, machine.label, machine.zone, machine.address, machine.status, machine.last_seen)
+      WHERE excluded.last_seen >= machine_status.last_seen
+        AND unixepoch(excluded.last_seen) - unixepoch(machine_status.last_seen) >= ?`,
+    machine.team_id, machine.machine_id, machine.label, machine.zone, machine.address, machine.status, machine.last_seen, minimumSeconds)
   }
 }

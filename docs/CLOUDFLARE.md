@@ -1,3 +1,5 @@
+> **Standard cost profile (November 4 update):** dashboard and source polling every five minutes; combined snapshots shared-cache for 60 seconds; heartbeat send/write interval five minutes; machine degradation after 12 minutes and offline after 20; pipeline stale after 15 minutes. Source-to-screen visibility can take about 11 minutes including collection, cache and browser timing. Faster updates require an approved funded deployment. This supersedes earlier live-refresh timings.
+
 # Claw & Order on Cloudflare
 
 ## Purpose and current boundary
@@ -9,7 +11,7 @@ The source is `des-work/c3claw`, branch `feature/team-topology-gallery`, PR #1. 
 ```mermaid
 flowchart LR
   Kali[Kali webhook or script] -->|Existing webhook unchanged| Discord[Existing Discord telemetry channels]
-  Discord -->|Bot REST reads; scheduled every minute| Worker[Cloudflare Worker and new dashboard]
+  Discord -->|Bot REST reads; scheduled every five minutes| Worker[Cloudflare Worker and new dashboard]
   Worker <--> D1[Dedicated D1 database]
   Machines[Machine heartbeat reporters] -->|Authenticated HTTPS| Worker
   Cyberlabs[Cyberlabs enrollment backend] -->|Optional identity-free team export| Worker
@@ -25,7 +27,7 @@ The owner confirmed the existing Kali-to-Discord connection is a webhook/script.
 | Worker | `claw-and-order`, on the account already used for the other Cloudflare projects |
 | D1 | `claw-and-order`, database ID `1b405da4-cdc6-4087-8194-295f22f8b74a` |
 | Static application | React/Vite output served by Workers Static Assets; API calls use the same origin |
-| Schedule | Every minute; two channels per run, rotating oldest-attempted first |
+| Schedule | Every five minutes; two channels per run, rotating oldest-attempted first |
 | Collection cutover | `2026-11-04T21:12:10.000Z` (November 4, 1:12:10 p.m. Pacific) |
 | Observability | Structured logs, sampled traces, source health, backlog and rejection counters |
 
@@ -104,11 +106,11 @@ GitHub hosts the source and runs the existing functional CI. The additional Work
 - Missing permissions, unreadable content, rate limits, or storage failures preserve recovery checkpoints. Global 429 cooldowns survive restarts. Do not delete checkpoints to hide an error.
 - Backend events are stored before export acknowledgement. Failed acknowledgements retry against deduplication. Invalid enrollment payloads or class conflicts retain the last good snapshot.
 - The summary endpoint reads small indexed summary/machine tables rather than scanning historical events. The event endpoint is capped at 100 rows. Request/response sizes and batch work are bounded.
-- Machine status is independent of Discord activity. No heartbeat means unknown; an online heartbeat degrades after 60 seconds and becomes offline after five minutes.
+- Machine status is independent of Discord activity. No heartbeat means unknown; an online heartbeat degrades after 12 minutes and becomes offline after 20 minutes.
 
-Default capacity is two telemetry channels per scheduled run. Put multiple teams' explicitly mapped webhooks in the appropriate class channel. Additional channels rotate fairly but can increase latency; health flags stale channels after three minutes. Sustained backlog requires a capacity change and a new load rehearsal, not resetting cursors. Each run stages up to 100 messages and imports up to 100 queued messages per selected channel.
+Default capacity is two telemetry channels per five-minute scheduled run. Put multiple teams' explicitly mapped webhooks in the appropriate class channel. Additional channels rotate fairly but can increase latency; health flags stale channels after 15 minutes. Sustained backlog requires a capacity change and a new load rehearsal, not resetting cursors. Each run stages up to 100 messages and imports up to 100 queued messages per selected channel.
 
-No paid subscription or plan upgrade was requested by the migration. The current token cannot read billing subscriptions, so the active plan is **unverified**. Workers Free currently allows 100,000 requests/day; D1 Free includes 5 million rows read and 100,000 rows written/day, with smaller database limits. These are account totals shared with other projects. At the current 4-second activity and 15-second status polling intervals, one visible dashboard uses about 9,120 API requests during an eight-hour day. Ninety machine reporters sending every 30 seconds use about 259,200 requests/day, before viewers or ingestion. A two-class deployment with that scale needs a reviewed plan/capacity decision. Free quota exhaustion returns errors; it must not be mistaken for current empty data.
+No paid subscription or plan upgrade was requested by the migration. The current token cannot read billing subscriptions, so the active plan is **unverified**. Workers Free currently allows 100,000 requests/day; D1 Free includes 5 million rows read and 100,000 rows written/day, with smaller database limits. These are account totals shared with other projects. The standard profile uses one combined dashboard request every five minutes: about 96 API requests per visible dashboard during an eight-hour day. Ninety machine reporters configured to send every five minutes use about 25,920 requests/day. Heartbeat writes faster than that are rejected with 429/Retry-After, but unwanted HTTP attempts still count, so configure the producers correctly. See [COST-CONTROLS.md](COST-CONTROLS.md) for assumptions, cost estimates and sponsorship policy. Free quota exhaustion returns errors; it must not be mistaken for current empty data.
 
 Official references: [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [D1 recovery](https://developers.cloudflare.com/d1/reference/time-travel/), [Discord channel reads](https://docs.discord.com/developers/resources/message#get-channel-messages).
 
@@ -118,12 +120,12 @@ Official references: [Workers pricing](https://developers.cloudflare.com/workers
 | --- | --- | --- |
 | Hosting and clean start | Root loads the topology gallery; `/api/status` and `/api/events` are empty before configuration; health reports `persistence=d1` and the reviewed release SHA | Keep new feeds disconnected; repair the Worker/D1 binding or roll back its code version |
 | Missing configuration | `/api/health` returns 503 with explicit problems while Discord is unconfigured | Expected pending state; configure the existing bot/source policy rather than claiming live readiness |
-| Real Discord pilot | One authorized Kali message per class appears once with its original posting time within two minutes of an idle scheduled reader | Inspect format, intent, effective permissions and source mappings; checkpoint remains recoverable; re-post corrected quarantined messages only after human review |
+| Real Discord pilot | One authorized Kali message per class appears once with its original posting time within 12 minutes of an idle scheduled reader under the standard profile | Inspect format, intent, effective permissions and source mappings; checkpoint remains recoverable; re-post corrected quarantined messages only after human review |
 | Permission isolation | Ordinary-user, wrong-webhook and cross-team test messages are rejected and counted without modifying another team | Disable the reader while correcting the source policy; inspect private rejection records |
 | Restart/backlog | A 250+ message staged test drains without missing/duplicate events across restarts; rejected messages have receipts | Keep source history and staging; repair errors and resume without advancing the checkpoint manually |
 | Machine reports | Authenticated heartbeat changes the correct machine; invalid/unauthorized reports fail; stale state degrades/offlines correctly | Leave unknown/offline indicators; fix the actual probe/report path |
 | Enrollment integration | Current-term reviewed roster teams/classes appear with counts, without PII; transfer/withdrawal follows the existing approval/audit process | Preserve last good snapshot and reconcile the Cyberlabs backend before reconnecting |
-| Load and quotas | At 2× expected peak plus a 5× burst, p95 API <1 second, no quota errors, source/dashboard totals match after catch-up, normal idle-source visibility ≤2 minutes | Reduce producers/viewers temporarily; review plan, batch limits, channel fan-out and polling; repeat staging test |
+| Load and quotas | At 2× expected peak plus a 5× burst, p95 API <1 second, no quota errors, source/dashboard totals match after catch-up, normal idle-source visibility ≤12 minutes under the standard profile | Reduce producers/viewers temporarily; review plan, batch limits, channel fan-out and polling; repeat staging test |
 | Recovery | D1 export checksum verified and restore rehearsed in a separate database; version rollback tested | Keep the working database; restore to a new database and rebind only after totals/inventory match |
 
 Real Discord, roster/role automation, machine producer and production-sized load acceptance remain operator gates until the actual credentials, active roster, and inventory are available. Local mocks are not evidence that a live Kali machine reached Discord.

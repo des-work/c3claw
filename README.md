@@ -8,6 +8,8 @@ Operation Claw & Order is a high-density, single-page React application designed
 
 ## Features
 
+**Standard service refreshes every five minutes.** See [cost controls and estimates](docs/COST-CONTROLS.md). Faster updates require a funded administrator-approved release.
+
 **Current hosting target: Cloudflare Workers + D1.** Setup, Discord reconnection, acceptance checks, and recovery are in [Cloudflare deployment](docs/CLOUDFLARE.md). The Heroku sections below describe the retained legacy deployment.
 
 Student roster/Discord enrollment integration and its deployment/failure checks are documented in [Student enrollment feed](docs/STUDENT-ENROLLMENT.md). The Cyberlabs handoff is in the backend repository.
