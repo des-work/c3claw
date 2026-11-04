@@ -14,6 +14,9 @@ dist-ssr
 *.local
 .env
 config/topology.json
+.cloudflare/
+.dev.vars*
+cloudflare-secrets*.json
 
 # Editor directories and files
 .vscode/*

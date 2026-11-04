@@ -2,7 +2,8 @@ import { Client, GatewayIntentBits } from 'discord.js'
 import { getPool, getDiscordCursor, saveDiscordCursor, recordDiscordRejection } from './db.js'
 import { loadDiscordSources, authorizedDiscordSource } from './discord-sources.js'
 
-const MESSAGE_PREFIX = '[OCRT]'
+import { parseDiscordTelemetry } from '../shared/discord.js'
+export { parseDiscordTelemetry } from '../shared/discord.js'
 const botState = { connected: false, last_sync: null, last_error: null, channels: 0 }
 const channelSync = new Map()
 const channelErrors = new Map()
@@ -15,13 +16,6 @@ export function getBotHealth() {
     failed_channels: channelErrors.size }
 }
 
-export function parseDiscordTelemetry(content) {
-  if (!content.startsWith(MESSAGE_PREFIX)) return null
-  const parts = content.slice(MESSAGE_PREFIX.length).trim().split('|').map(part => part.trim())
-  if (parts.length < 4 || parts.slice(0, 4).some(part => !part)) return false
-  const [team_id, tool, target, result, ...details] = parts
-  return { team_id, tool, target, result, details: details.join(' | ') }
-}
 
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 

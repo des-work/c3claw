@@ -8,6 +8,8 @@ Operation Claw & Order is a high-density, single-page React application designed
 
 ## Features
 
+**Current hosting target: Cloudflare Workers + D1.** Setup, Discord reconnection, acceptance checks, and recovery are in [Cloudflare deployment](docs/CLOUDFLARE.md). The Heroku sections below describe the retained legacy deployment.
+
 Student roster/Discord enrollment integration and its deployment/failure checks are documented in [Student enrollment feed](docs/STUDENT-ENROLLMENT.md). The Cyberlabs handoff is in the backend repository.
 
 - **Topology Gallery** — Scan each team's operator, WAN, DMZ, and LAN machines in a prominent card gallery
@@ -27,9 +29,9 @@ Student roster/Discord enrollment integration and its deployment/failure checks 
 | **Framework**| React 19 (via Vite 8)                       |
 | **Styling**  | Tailwind CSS 3.4 + custom dark theme tokens |
 | **Icons**    | Lucide React                                |
-| **Backend**  | Node.js + Express 5                         |
-| **Database** | PostgreSQL (optional, for event persistence)|
-| **Hosting**  | Heroku                                      |
+| **Backend**  | Cloudflare Worker; Express retained for local/legacy use |
+| **Database** | Cloudflare D1; PostgreSQL retained for legacy deployments |
+| **Hosting**  | Cloudflare Workers + Static Assets          |
 
 ---
 

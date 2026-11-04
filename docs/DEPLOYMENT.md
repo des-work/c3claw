@@ -1,5 +1,7 @@
 # Dashboard release and recovery
 
+**For the new Cloudflare deployment, use [CLOUDFLARE.md](CLOUDFLARE.md).** The PostgreSQL/Heroku procedure below is retained for the legacy runtime and historical recovery.
+
 This dashboard shows team topology and machine reports, imports scored events from the Claw & Order backend, and can separately import `[OCRT]` Discord telemetry. The full readiness matrix and exercise rehearsal are in the backend repository's `claw-and-order/docs/DEPLOYMENT.md`.
 
 ## Production configuration
