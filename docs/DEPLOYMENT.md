@@ -13,6 +13,7 @@ This dashboard shows team topology and machine reports, imports scored events fr
 | `BACKEND_EXPORT_URL` and `BACKEND_EXPORT_SECRET` | For scored event feed | Backend base URL and backend read-only `EVENT_EXPORT_SECRET`. Both must be set together. Dashboard health shows queue depth and errors. |
 | `DISCORD_BOT_TOKEN`, `ALLOWED_CHANNELS` | For distinct Discord telemetry | Explicit comma separated channel IDs. Bot needs View Channel, Read Message History, and Message Content intent. |
 | `DISCORD_SOURCE_POLICY_FILE` | For Discord telemetry | Required file based on `config/discord-sources.example.json`: exact channel/webhook IDs mapped to permitted team IDs; every allowlisted channel covered. No webhook URL tokens in this file. |
+| `DISCORD_SOURCE_POLICY_JSON` | Heroku alternative | Same reviewed source policy provided through protected app config. Set exactly one of JSON or FILE. Preserve existing bot tokens; do not commit a private configuration file to Git. |
 | `DISCORD_INITIAL_BACKFILL` | First Discord setup | Default `false` starts at current channel head; `true` imports history. Decide before first connection. |
 | `CORS_ORIGINS` | Cross origin browser client | Comma separated trusted origins. Empty is same origin only. |
 | `DB_POOL_SIZE` | Connection budget tuning | Default 5. Count this against all backend pools and DB connection limit. |

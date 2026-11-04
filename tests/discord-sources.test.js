@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { parseDiscordSources, authorizedDiscordSource } from '../server/discord-sources.js'
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { parseDiscordSources, authorizedDiscordSource, loadDiscordSources } from '../server/discord-sources.js'
 import { parseEvent, updateSummary } from '../server/events.js'
 
 const channel = '910000000000000001'
@@ -8,6 +11,32 @@ const otherChannel = '910000000000000002'
 const webhook = '920000000000000001'
 const source = { channel_id: channel, webhook_id: webhook, team_ids: ['ClassA_01'] }
 const policy = sources => ({ version: 1, sources })
+
+test('Heroku inline source policy and file policy enforce identical trusted mappings', () => {
+  const channels = new Set([channel])
+  const encoded = JSON.stringify(policy([source]))
+  const dir = mkdtempSync(join(tmpdir(), 'claw-discord-policy-'))
+  try {
+    const path = join(dir, 'sources.json')
+    writeFileSync(path, encoded)
+    const inline = loadDiscordSources(channels, { DISCORD_SOURCE_POLICY_JSON: encoded })
+    assert.deepEqual(inline, loadDiscordSources(channels, { DISCORD_SOURCE_POLICY_FILE: path }))
+    assert.equal(authorizedDiscordSource(inline, { channelId: channel, webhookId: webhook }, 'ClassA_01'), true)
+    assert.equal(authorizedDiscordSource(inline, { channelId: channel, webhookId: webhook }, 'ClassB_01'), false)
+    assert.throws(() => loadDiscordSources(channels, {}), /exactly one/)
+    assert.throws(() => loadDiscordSources(channels, {
+      DISCORD_SOURCE_POLICY_FILE: path, DISCORD_SOURCE_POLICY_JSON: encoded,
+    }), /exactly one/)
+    assert.throws(() => loadDiscordSources(channels, { DISCORD_SOURCE_POLICY_JSON: 'PRIVATE_INVALID_PAYLOAD' }),
+      error => error.message === 'Discord source policy is not readable JSON')
+    assert.throws(() => loadDiscordSources(channels, { DISCORD_SOURCE_POLICY_JSON: 'x'.repeat(1024 * 1024 + 1) }), /exceeds 1 MiB/)
+    assert.throws(() => loadDiscordSources(channels, {
+      DISCORD_SOURCE_POLICY_JSON: JSON.stringify(policy([{ ...source, team_ids: ['ClassA_*'] }])),
+    }), /Invalid Discord source/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
 
 test('only the mapped webhook, channel and exact team can publish telemetry', () => {
   const mappings = parseDiscordSources(policy([source]), new Set([channel]))
