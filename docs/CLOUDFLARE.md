@@ -2,6 +2,8 @@
 
 # Claw & Order on Cloudflare
 
+**November 5 — Hermes and roster update:** read [Hermes, Discord access and team readiness](HERMES-DISCORD-ROSTER-READINESS.md). Hermes is selected; the existing Discord server and incoming webhooks stay. Native Hermes bot replies do not carry the required posting webhook identity and are rejected as telemetry. Verify the installed publisher's actual format before connection. Access to additional private channels must be authorized and tested; adding telemetry channels also changes collection latency. Reconcile Discord-only students before approved imports, and keep faculty-approved red-team coverage separate from enrollment/scoring authorization.
+
 ## Purpose and current boundary
 
 Cloudflare replaces the Heroku **React dashboard, telemetry API, persistent event database, and Discord reader**. The topology gallery and its existing Ultra-PC cyberpunk visual identity are retained. The Python scoring/enrollment application, Excel review workflow, Discord role assignment worker, and Hermes instructions remain a separate Cyberlabs service. This migration does not install that service or create student roles.
