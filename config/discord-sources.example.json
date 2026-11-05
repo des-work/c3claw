@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "channel_id": "REPLACE_WITH_CLASS_A_TELEMETRY_CHANNEL_ID",
+      "webhook_id": "REPLACE_WITH_KALI_TEAM_A_WEBHOOK_ID",
+      "team_ids": ["ClassA_01"]
+    },
+    {
+      "channel_id": "REPLACE_WITH_CLASS_B_TELEMETRY_CHANNEL_ID",
+      "webhook_id": "REPLACE_WITH_KALI_TEAM_B_WEBHOOK_ID",
+      "team_ids": ["ClassB_01"]
+    }
+  ]
+}

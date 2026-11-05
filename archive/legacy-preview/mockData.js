@@ -1,4 +1,4 @@
-export const mockTeams = [
+const mockTeamRows = [
   { team_id: "TEAM_01", status: "online", phase: 2, last_action: "nmap -sS -p- 10.0.1.5", last_seen: new Date(Date.now() - 5000).toISOString(), cidr: "10.0.1.0/24", blocked_count: 0, event_count: 142 },
   { team_id: "TEAM_02", status: "online", phase: 3, last_action: "Exfiltrating SAM database", last_seen: new Date(Date.now() - 2000).toISOString(), cidr: "10.0.2.0/24", blocked_count: 2, event_count: 310 },
   { team_id: "TEAM_03", status: "degraded", phase: 1, last_action: "ping 10.0.3.1 -c 4", last_seen: new Date(Date.now() - 45000).toISOString(), cidr: "10.0.3.0/24", blocked_count: 5, event_count: 24 },
@@ -33,6 +33,32 @@ export const mockTeams = [
   { team_id: "McIntyre_02",status: "unknown",  phase: 1, last_action: "Establishing foothold",      last_seen: new Date(Date.now() - 180000).toISOString(), cidr: "10.0.2.0/24", blocked_count: 0, event_count: 0   },
   { team_id: "McIntyre_03",status: "online",   phase: 3, last_action: "Directory busting",          last_seen: new Date(Date.now() - 9000).toISOString(),   cidr: "10.0.3.0/24", blocked_count: 1, event_count: 112 },
 ];
+
+// Demonstration inventory: production machines appear only after inventory is configured
+// or an authenticated machine report is received by the dashboard API.
+export const mockTeams = mockTeamRows.map((team, index) => {
+  const subnet = team.cidr?.split('.')[2] || String(index + 1)
+  const states = team.status === 'offline'
+    ? ['offline', 'offline', 'offline', 'unknown']
+    : team.status === 'degraded' || team.status === 'idle'
+      ? ['online', 'online', 'degraded', 'offline']
+      : team.status === 'unknown'
+        ? ['unknown', 'unknown', 'unknown', 'unknown']
+        : ['online', 'online', index % 4 === 0 ? 'degraded' : 'online', 'online']
+  return {
+    ...team,
+    machines: [
+      { machine_id: 'kali', label: 'Kali reporter', zone: 'operator', address: `10.0.${subnet}.10` },
+      { machine_id: 'gateway', label: 'WAN gateway', zone: 'wan', address: `10.0.${subnet}.1` },
+      { machine_id: 'web', label: 'Web target', zone: 'dmz', address: `10.0.${subnet}.20` },
+      { machine_id: 'dc', label: 'Domain controller', zone: 'lan', address: `10.0.${subnet}.30` },
+    ].map((machine, machineIndex) => ({
+      ...machine,
+      status: states[machineIndex],
+      last_seen: states[machineIndex] === 'unknown' ? null : team.last_seen,
+    })),
+  }
+});
 
 export const mockEvents = [
   { id: "evt_1", team_id: "TEAM_02", timestamp: new Date(Date.now() - 1000).toISOString(), tool: "Mimikatz", target: "DC-01", result: "SUCCESS", details: "Hashes extracted" },

@@ -24,15 +24,15 @@ const StatusBadge = ({ status }) => {
         return {
           bg: 'bg-danger/20',
           border: 'border-danger',
-          text: 'text-danger font-black drop-shadow-[0_0_5px_rgba(255,71,87,0.8)] animate-pulse',
-          icon: <ShieldX className="w-5 h-5 text-danger animate-pulse" />,
+          text: 'text-danger font-black drop-shadow-[0_0_5px_rgba(255,71,87,0.8)] animate-pulse motion-reduce:animate-none',
+          icon: <ShieldX className="w-5 h-5 text-danger animate-pulse motion-reduce:animate-none" />,
           glow: 'shadow-[inset_0_0_20px_rgba(255,71,87,0.4),0_0_10px_rgba(255,71,87,0.4)] border-[3px]'
         };
       default:
         return {
           bg: 'bg-surface/50',
-          border: 'border-muted/50',
-          text: 'text-muted',
+          border: 'border-gray-500',
+          text: 'text-gray-300',
           icon: null,
           glow: ''
         };

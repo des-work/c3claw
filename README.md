@@ -8,11 +8,16 @@ Operation Claw & Order is a high-density, single-page React application designed
 
 ## Features
 
-- **Live Team Monitoring** — Track 12+ teams simultaneously with real-time status indicators (Online / Degraded / Offline / Unknown)
-- **Attack Phase Visualization** — Visual progress bars showing each team's current incursion phase (Phases 1-3)
-- **Active Operations Feed** — See the last command or tool each team executed
+**Standard service refreshes every five minutes.** See [cost controls and estimates](docs/COST-CONTROLS.md). Faster updates require a funded administrator-approved release.
+
+**Current hosting target: Cloudflare Workers + D1.** Setup, Discord reconnection, acceptance checks, and recovery are in [Cloudflare deployment](docs/CLOUDFLARE.md). The Heroku sections below describe the retained legacy deployment.
+
+Student roster/Discord enrollment integration and its deployment/failure checks are documented in [Student enrollment feed](docs/STUDENT-ENROLLMENT.md). The Cyberlabs handoff is in the backend repository.
+
+- **Topology Gallery** — Scan each team's operator, WAN, DMZ, and LAN machines in a prominent card gallery
+- **Live Machine Monitoring** — Authenticated reports update color coded machine indicators; missing reports remain unknown
 - **Live Telemetry Stream** — A scrolling terminal-style activity feed showing the 20 most recent events with color-coded results (SUCCESS / FAILED / BLOCKED)
-- **Overall System Health Badge** — Aggregated fleet status: ALL SYSTEMS GO / DEGRADED / CRITICAL
+- **Overall System Health Badge** — Aggregated team and machine status: ALL SYSTEMS GO / DEGRADED / CRITICAL / UNKNOWN
 - **Real-Time Clock** — UTC/local timestamp prominently displayed in the header
 - **Client-Side Search** — Instantly filter teams by designation with a search bar
 - **Responsive Dark Theme** — Custom Tailwind color palette designed for low-light environments and large displays
@@ -26,9 +31,9 @@ Operation Claw & Order is a high-density, single-page React application designed
 | **Framework**| React 19 (via Vite 8)                       |
 | **Styling**  | Tailwind CSS 3.4 + custom dark theme tokens |
 | **Icons**    | Lucide React                                |
-| **Backend**  | Node.js + Express 5                         |
-| **Database** | PostgreSQL (optional, for event persistence)|
-| **Hosting**  | Heroku                                      |
+| **Backend**  | Cloudflare Worker; Express retained for local/legacy use |
+| **Database** | Cloudflare D1; PostgreSQL retained for legacy deployments |
+| **Hosting**  | Cloudflare Workers + Static Assets          |
 
 ---
 
@@ -50,18 +55,19 @@ operation-claw-and-order/
 │
 ├── server/
 │   ├── index.js                # Express server, API routes, auth
+│   ├── topology.js             # Inventory merge and freshness rules
 │   └── db.js                   # PostgreSQL connection & queries
+├── config/topology.example.json # Sample machine inventory (not loaded automatically)
 │
 └── src/
     ├── main.jsx                # React entry point
     ├── index.css               # Tailwind directives + scrollbar styles
-    ├── mockData.js             # 12 mock teams + 20 mock events
+    ├── hooks/                  # API polling; empty until live data arrives
     ├── components/
     │   ├── App.jsx             # Root layout orchestrator
     │   ├── HeaderBar.jsx       # Title, fleet metric, clock, status badge
-    │   ├── StatusBadge.jsx     # ALL SYSTEMS GO / DEGRADED / CRITICAL
-    │   ├── TeamList.jsx        # Searchable, scrollable team table
-    │   ├── TeamRow.jsx         # Team row with live "last seen" timer
+    │   ├── StatusBadge.jsx     # Overall system health state
+    │   ├── TopologyGallery.jsx # Searchable gallery with machine status
     │   ├── ActivityFeed.jsx    # Scrolling telemetry terminal
     │   └── EventRow.jsx        # Single event line in the feed
     ├── hooks/
@@ -73,6 +79,8 @@ operation-claw-and-order/
 ---
 
 ## Deployment to Heroku
+
+See [the deployment and recovery checklist](docs/DEPLOYMENT.md) before using the quick-start steps below.
 
 ### 1. Create the Heroku app
 
@@ -95,18 +103,13 @@ This automatically sets `DATABASE_URL` for you.
 **All config vars must be set BEFORE the first deploy** because `VITE_API_URL` is baked into the frontend at build time.
 
 ```bash
-# Required: Your Heroku Platform API key (to fetch team app statuses)
-heroku config:set HEROKU_API_KEY=your-heroku-api-key
-
-# Required: Only show Heroku apps matching this prefix as teams
-# e.g. if team apps are named ocrt-team-01, ocrt-team-02, etc.
-heroku config:set TEAM_APP_PREFIX=ocrt-
-
 # Required: The public URL of this app (so the frontend can reach the API)
 heroku config:set VITE_API_URL=https://your-app-name.herokuapp.com
 
-# Recommended: Protect the event POST endpoint with an API key
+# Required for machine reports; recommended for event ingestion
 heroku config:set EVENT_API_KEY=a-strong-random-secret
+
+# Optional: set TOPOLOGY_JSON in Heroku config to your inventory JSON
 
 # Required: Ensure devDependencies (Vite, Tailwind) are installed during build
 heroku config:set NPM_CONFIG_PRODUCTION=false
@@ -131,15 +134,25 @@ heroku logs --tail
 
 | Variable            | Required | Description                                                       |
 | ------------------- | -------- | ----------------------------------------------------------------- |
-| `HEROKU_API_KEY`    | Yes      | Heroku Platform API key — used to fetch team app statuses         |
-| `TEAM_APP_PREFIX`   | Yes      | Only Heroku apps whose name starts with this prefix appear as teams |
-| `VITE_API_URL`      | Yes*     | Backend URL for the frontend to call. If empty, uses mock data    |
-| `EVENT_API_KEY`     | Recommended | Bearer token required for `POST /api/events`. If empty, endpoint is open |
-| `DATABASE_URL`      | Recommended | PostgreSQL connection string (auto-set by Heroku Postgres addon)  |
+| `VITE_API_URL` | Optional | API origin; empty uses the dashboard origin |
+| `EVENT_API_KEY`     | Yes for machine health | Bearer token for `POST /api/machines/heartbeat`; also protects event ingestion |
+| `TOPOLOGY_FILE`     | Optional | Path to JSON team/machine inventory. Omit to show only machines that report in. |
+| `TOPOLOGY_JSON`     | Optional | Inline inventory JSON for deployments without a local inventory file; takes precedence over `TOPOLOGY_FILE`. |
+| `DATABASE_URL`      | Required in production | PostgreSQL connection string (auto-set by Heroku Postgres addon)  |
+| `DISCORD_BOT_TOKEN` | For Discord import | Bot token with Message Content intent and Read Message History permission |
+| `ALLOWED_CHANNELS` | For Discord import | Comma-separated telemetry channel IDs; add any number of classes or teams |
+| `DISCORD_SOURCE_POLICY_FILE` | For Discord import | Required JSON file binding each allowed channel and webhook ID to exact team IDs. Copy `config/discord-sources.example.json`, replace placeholders and keep the deployment file private. |
+| `DISCORD_SOURCE_POLICY_JSON` | Alternative for Heroku | The same source-policy JSON supplied through protected config. Set exactly one of JSON or FILE; no private deployment file needs to be committed. |
+| `DISCORD_INITIAL_BACKFILL` | No | Set to `true` only for a fresh installation that should import existing channel history. Default starts at the current channel head to avoid duplicating legacy events. |
+| `BACKEND_EXPORT_URL` | For scored events | Base URL of the scoring backend's authenticated export API. |
+| `BACKEND_EXPORT_SECRET` | For scored events | Backend read-only `EVENT_EXPORT_SECRET`; required with `BACKEND_EXPORT_URL`. |
+| `CORS_ORIGINS` | For cross-origin clients | Comma-separated trusted browser origins; empty permits same-origin only. |
+| `DB_POOL_SIZE` | No | PostgreSQL pool maximum; default 5. |
+| `PG_CA_CERT_FILE` | For private CA | PEM certificate path for verified database TLS. |
 | `PORT`              | No       | Server port (Heroku sets this automatically; defaults to 3001)    |
 | `NPM_CONFIG_PRODUCTION` | Yes  | Must be `false` so Heroku installs devDependencies for the build  |
 
-*If `VITE_API_URL` is not set, the dashboard runs in mock mode with synthetic data.
+*If `VITE_API_URL` is not set, the dashboard calls its own origin. Start the local API on port 3001 for Vite development.
 
 ---
 
@@ -153,8 +166,8 @@ heroku logs --tail
 ### Quick start
 
 ```bash
-git clone https://github.com/009182323-mango/OCRT.git
-cd OCRT
+git clone https://github.com/des-work/c3claw.git
+cd c3claw
 npm install
 cp .env.example .env
 ```
@@ -162,7 +175,7 @@ cp .env.example .env
 ### Running locally
 
 ```bash
-# Frontend only (mock mode, port 5173)
+# Frontend (port 5173; requires the local API on port 3001)
 npm run dev
 
 # Backend only (port 3001)
@@ -177,7 +190,7 @@ npm run server
 npm run build-start
 ```
 
-The Vite dev server automatically proxies `/api/*` requests to `localhost:3001`, so you don't need to set `VITE_API_URL` during local development.
+With `VITE_API_URL` unset, Vite proxies `/api` to the local server on port 3001. No synthetic data is loaded.
 
 ---
 
@@ -186,11 +199,39 @@ The Vite dev server automatically proxies `/api/*` requests to `localhost:3001`,
 | Method | Endpoint       | Auth             | Description                         |
 | ------ | -------------- | ---------------- | ----------------------------------- |
 | GET    | `/api/health`  | None             | Health check + persistence status   |
-| GET    | `/api/status`  | None             | Array of team objects from Heroku   |
-| GET    | `/api/events`  | None             | Last 100 events                     |
+| GET    | `/api/status`  | None             | Teams with machine inventory and current health state |
+| GET    | `/api/events?limit=20` | None       | Recent events; limit 1–100, default 100 |
 | POST   | `/api/events`  | Bearer token*    | Submit a new event                  |
+| POST   | `/api/machines/heartbeat` | Bearer token required | Report one machine's health |
 
-*Only enforced when `EVENT_API_KEY` is set.
+*Production requires `EVENT_API_KEY` and `DATABASE_URL`. Development may use memory storage.
+
+### Machine topology and health
+
+Copy `config/topology.example.json` to `config/topology.json`, replace the sample team, names, and addresses with the real inventory, and set `TOPOLOGY_FILE=config/topology.json`. Add `class_id` to each team to generate class filters automatically; there is no fixed class or team count. The real file is ignored by Git. For Heroku, set `TOPOLOGY_JSON` to the same JSON content as a config variable. Inventory machines appear as **unknown** until they send a report. Machines that report without an inventory entry also appear, using their reported zone and label.
+
+Send a report from a trusted monitor or VM agent with `team_id`, stable `machine_id`, `zone` (`operator`, `wan`, `dmz`, or `lan`), and `status` (`online`, `degraded`, or `offline`). Optional fields are `label` and `address`. Example:
+
+```bash
+curl -X POST http://localhost:3001/api/machines/heartbeat \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer your-event-api-key' \
+  -d '{"team_id":"Brown_01","machine_id":"web","label":"Web target","zone":"dmz","address":"10.0.1.20","status":"online"}'
+```
+
+An online report becomes **degraded** after 60 seconds without another report and **offline** after five minutes. A reported offline state is immediate. Operation events do not determine machine health. With PostgreSQL configured, latest machine reports persist across server restarts; without it, they live in memory.
+
+### Discord telemetry import and recovery
+
+The bot reads `[OCRT] team-id | Tool | Target | Result | Details` messages from `ALLOWED_CHANNELS`. It saves each Discord message ID as `source_id`, so retries and reconnect replay cannot double count an event. A per-channel cursor is persisted in PostgreSQL after each accepted message. The importer walks channel history from the cursor on reconnect and retries transport failures with backoff. Malformed or rejected messages are retained in `discord_rejections`; `/api/health` reports `discord_rejections` so an operator can investigate them. Bot access requires **View Channel**, **Read Message History**, and **Message Content** intent. The scoring backend's outgoing milestone alerts are a separate Discord path and are not treated as operation telemetry. Scored events arrive through the authenticated backend export and are acknowledged only after this dashboard stores them; `backend:<event_id>` prevents replay duplicates.
+
+Copy `config/discord-sources.example.json` to `config/discord-sources.json`, enter actual channel/webhook IDs and exact team IDs, then set `DISCORD_SOURCE_POLICY_FILE=config/discord-sources.json`. Webhook IDs are metadata, not secret URL tokens. Every allowlisted channel needs at least one mapping; missing/ambiguous mappings stop reader startup. An ordinary user or bot message, an unknown webhook, or a webhook claiming another team's ID is rejected and recorded. Give each Kali/team its own limited posting hook where practical. A holder of that hook can still impersonate its mapped team, so keep the URL private and rotate it after exposure.
+
+For Heroku, set `DISCORD_SOURCE_POLICY_JSON` to the same reviewed JSON in the app's protected config, and leave `DISCORD_SOURCE_POLICY_FILE` empty. Exactly one source is permitted, capped at 1 MiB. Never put webhook URL tokens or bot credentials inside the source policy. Preserve existing bot credentials while changing deployment configuration.
+
+Imported timestamps use Discord's original message creation time, including after replay. This is the Discord posting time, not a measured tool execution time. Existing Kali scripts must post the exact `[OCRT]` contract; free-form messages/embeds need a reviewed formatter. Use one dashboard feed per logical event: Discord import and backend export have different source IDs and do not deduplicate each other.
+
+For an existing dashboard with historical events, leave `DISCORD_INITIAL_BACKFILL=false` on the first deploy to initialize cursors at the current channel heads. For a new dashboard that should import older Discord telemetry, set it to `true` before first start. Initial backfill stops after 100,000 messages per channel and logs a recovery error instead of skipping older records. If the bot cannot read a channel, its cursor stays put and it retries. Keep PostgreSQL enabled in production; memory mode is for local preview only.
 
 ### POST /api/events body
 
@@ -225,6 +266,7 @@ curl -X POST https://your-app.herokuapp.com/api/events \
 | `npm run build-start`| Build frontend and serve via Express     |
 | `npm start`          | Start Express backend (production mode)  |
 | `npm run lint`       | Run ESLint across all source files       |
+| `npm test`           | Test machine status aging and inventory merging |
 
 ---
 
@@ -232,11 +274,11 @@ curl -X POST https://your-app.herokuapp.com/api/events \
 
 ### Mock Mode (default)
 
-When `VITE_API_URL` is not set, the dashboard renders 12 pre-configured teams and 20 simulated events from `mockData.js`. New mock events are generated every 4 seconds, and online team statuses refresh every 15 seconds.
+When `VITE_API_URL` is not set, the dashboard reads `/api` from its own origin. Vite forwards those requests to port 3001 during development. The dashboard starts empty and never substitutes simulated teams or events. Legacy synthetic fixtures are preserved in `archive/legacy-preview/`.
 
 ### Live API Mode
 
-When `VITE_API_URL` is set, the hook polls the backend:
+The hook polls the configured API (same origin by default):
 
 | Endpoint          | Poll Interval | Description                    |
 | ----------------- | ------------- | ------------------------------ |

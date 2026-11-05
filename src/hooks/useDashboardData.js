@@ -1,94 +1,52 @@
-import { useState, useEffect } from 'react';
-import { mockTeams, mockEvents } from '../mockData';
+import { useState, useEffect, useMemo } from 'react'
+import { STANDARD_POLICY, ageSnapshotTeams, refreshSeconds } from '../../shared/refresh-policy.js'
+import { createDashboardPoller } from '../lib/dashboard-poller.js'
 
 export function useDashboardData() {
-  const apiUrl = import.meta.env.VITE_API_URL;
-
-  const [teams, setTeams] = useState(apiUrl ? [] : mockTeams);
-  const [events, setEvents] = useState(apiUrl ? [] : mockEvents);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const apiUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+  const [snapshot, setSnapshot] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [now, setNow] = useState(Date.now)
 
   useEffect(() => {
-    let statusInterval;
-    let eventsInterval;
-
-    if (!apiUrl) {
-      // Use Mock Data
-      setLoading(false);
-
-      // Simulate real-time team status updates: refresh last_seen for online teams
-      statusInterval = setInterval(() => {
-        setTeams(prev => prev.map(team =>
-          team.status === 'online'
-            ? { ...team, last_seen: new Date().toISOString(), event_count: team.event_count + 1 }
-            : team
-        ));
-      }, 15000);
-
-      // Simulate incoming telemetry events
-      const tools = ['Nmap', 'Metasploit', 'Hydra', 'Custom', 'SQLMap', 'Gobuster'];
-      const results = ['SUCCESS', 'FAILED', 'BLOCKED'];
-      eventsInterval = setInterval(() => {
-        setEvents(prev => {
-          const teamIds = ['TEAM_01','TEAM_02','TEAM_03','TEAM_05','TEAM_07','TEAM_08','TEAM_09','TEAM_11','TEAM_12','Nestler_01','Nestler_02','Nestler_03','Brown_01','Brown_02','Brown_03','Flores_01','Flores_02','Flores_03','McIntyre_01','McIntyre_02','McIntyre_03'];
-          const tool = tools[Math.floor(Math.random() * tools.length)];
-          const result = results[Math.floor(Math.random() * results.length)];
-          const teamId = teamIds[Math.floor(Math.random() * teamIds.length)];
-          const newEvent = {
-            id: `evt_mock_${Date.now()}`,
-            team_id: teamId,
-            timestamp: new Date().toISOString(),
-            tool,
-            target: `10.0.${Math.floor(Math.random() * 12) + 1}.${Math.floor(Math.random() * 254) + 1}`,
-            result,
-            details: `${tool} scan completed`
-          };
-          return [...prev, newEvent].slice(-100);
-        });
-      }, 4000);
-      
-    } else {
-      // API Polling
-      const fetchStatus = async () => {
-        try {
-          const response = await fetch(`${apiUrl}/api/status`);
-          if (!response.ok) throw new Error('Failed to fetch status');
-          const data = await response.json();
-          setTeams(data);
-          setError(null);
-        } catch (err) {
-          setError(err.message);
-        } finally {
-          setLoading(false);
+    const poller = createDashboardPoller({
+      fetchSnapshot: async signal => {
+        const response = await fetch(`${apiUrl}/api/dashboard`, {
+          signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+        })
+        if (!response.ok) {
+          const problem = new Error('Dashboard snapshot unavailable')
+          const seconds = Number(response.headers.get('retry-after'))
+          if (Number.isFinite(seconds) && seconds > 0) problem.retryAfterMs = Math.min(seconds, 3600) * 1000
+          throw problem
         }
-      };
-
-      const fetchEvents = async () => {
-        try {
-          const response = await fetch(`${apiUrl}/api/events`);
-          if (!response.ok) throw new Error('Failed to fetch events');
-          const data = await response.json();
-          setEvents(data);
-        } catch (err) {
-          console.error("Error fetching events:", err);
+        const data = await response.json()
+        if (!Array.isArray(data.teams) || !Array.isArray(data.events) || !Number.isFinite(Date.parse(data.generated_at))) {
+          throw new Error('Invalid dashboard snapshot')
         }
-      };
-
-      // Initial fetch
-      fetchStatus();
-      fetchEvents();
-
-      // Poll intervals
-      statusInterval = setInterval(fetchStatus, 15000);
-      eventsInterval = setInterval(fetchEvents, 4000);
-    }
-
+        return data
+      },
+      onData: data => { setSnapshot(data); setNow(Date.now()) },
+      onError: setError,
+      onSettled: () => setLoading(false),
+    })
+    poller.start()
+    const onVisible = () => { setNow(Date.now()); poller.visibilityChanged() }
+    document.addEventListener('visibilitychange', onVisible)
+    // Re-age local indicators without making network requests.
+    const clock = setInterval(() => setNow(Date.now()), 30_000)
     return () => {
-      clearInterval(statusInterval);
-      clearInterval(eventsInterval);
-    };
-  }, [apiUrl]);
+      poller.stop()
+      clearInterval(clock)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [apiUrl])
 
-  return { teams, events, loading, error };
+  const policy = snapshot?.policy || STANDARD_POLICY
+  const teams = useMemo(() => ageSnapshotTeams(snapshot?.teams || [], now, policy), [snapshot, now, policy])
+  const stale = snapshot && now - Date.parse(snapshot.generated_at) > refreshSeconds(policy.refresh_seconds) * 2000
+  return { teams, events: snapshot?.events || [], loading,
+    error: error || (stale ? 'Snapshot is older than two refresh intervals' : null),
+    policy, generatedAt: snapshot?.generated_at || null, pipelineHealth: snapshot?.health || null }
 }

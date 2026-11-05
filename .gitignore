@@ -8,10 +8,15 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+config/discord-sources.json
 dist
 dist-ssr
 *.local
 .env
+config/topology.json
+.cloudflare/
+.dev.vars*
+cloudflare-secrets*.json
 
 # Editor directories and files
 .vscode/*
