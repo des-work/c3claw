@@ -62,7 +62,11 @@ export function effectivePermissions(guildId, roles, member, channel) {
 async function discordGet(path, env, fetchFn) {
   const response = await fetchFn(`https://discord.com/api/v10${path}`, {
     headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` },
-    redirect: 'error', signal: AbortSignal.timeout(5_000),
+    // The Workers runtime rejects redirect: 'error' outright, so every read threw
+    // before leaving the edge. 'manual' returns the 3xx unfollowed, and the
+    // !response.ok check below still refuses it, so the bot credential is never
+    // replayed to a redirect target.
+    redirect: 'manual', signal: AbortSignal.timeout(5_000),
   })
   if (response.status === 429) {
     const body = await boundedJson(response, 'Discord rate limit', 16_384)
