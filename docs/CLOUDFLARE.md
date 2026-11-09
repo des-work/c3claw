@@ -2,6 +2,8 @@
 
 # Claw & Order on Cloudflare
 
+**November 8 — Nestler migration staged, not cut over:** the website/API Worker and a verified D1 restore now exist in Nestler's account. Public routing and collection are disabled there. Initial `workers.dev` registration failed with HTTP 403; the dashboard also displayed **No access / Authentication error**. Nestler must complete the account's initial Workers address setup from his owner login. The original production site remains unchanged. See [migration status and cutover steps](NESTLER-MIGRATION-STATUS.md). Deployment still defaults to the original account until the new public endpoint passes verification; select `CLAW_DEPLOY_TARGET=nestler` explicitly for staging.
+
 **November 5 — Hermes and roster update:** read [Hermes, Discord access and team readiness](HERMES-DISCORD-ROSTER-READINESS.md). Hermes is selected; the existing Discord server and incoming webhooks stay. Native Hermes bot replies do not carry the required posting webhook identity and are rejected as telemetry. Verify the installed publisher's actual format before connection. Access to additional private channels must be authorized and tested; adding telemetry channels also changes collection latency. Reconcile Discord-only students before approved imports, and keep faculty-approved red-team coverage separate from enrollment/scoring authorization.
 
 ## Purpose and current boundary

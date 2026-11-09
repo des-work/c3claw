@@ -1,5 +1,7 @@
 # Operation Claw & Order
 
+**November 5 architecture revision:** [Distributed architecture and pipeline review](docs/DISTRIBUTED-ARCHITECTURE-2026-11-05.md) records Orange on three Mac Studios, Blue in Cyberlabs and Red on ACCESS Jetstream with four A100 GPUs. Exact Orange model and Blue GPU designation remain unconfirmed. Read its deployment, identity, credential and attribution gates before enabling the new placements.
+
 > **A real-time cybersecurity operations dashboard for monitoring offensive security exercises.**
 
 Operation Claw & Order is a high-density, single-page React application designed to be displayed on classroom screens and command-center monitors during live cyber-attack simulations. It provides instructors and exercise coordinators with a real-time tactical overview of every participating team's status, attack phase, active operations, and a scrolling event telemetry feed — all rendered in a dark, military-grade aesthetic.
