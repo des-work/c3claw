@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { Miniflare, Log, LogLevel, convertV4MiniflareOptions } from 'miniflare'
 import { Store } from './store.js'
-import { pollChannel, initialCursor, syncDiscord } from './discord.js'
+import { pollChannel, initialCursor, syncDiscord, discordHealth } from './discord.js'
 import { syncBackend } from './backend.js'
 
 const channel = '123456789012345678'
@@ -128,6 +128,43 @@ test('Discord permissions, rate limits and unreadable content preserve recovery 
   await assert.rejects(pollChannel(store, envConfig, row, policy, history([message(1, { content: '' })])), /Unreadable/)
   assert.equal((await store.first('SELECT message_id FROM discord_cursors')).message_id, floor.toString())
   assert.equal((await store.rows('SELECT * FROM discord_inbox')).length, 1)
+})
+
+test('channels in local rate-limit cooldown do not starve other channels and resume when eligible', async t => {
+  const { store } = await setup(t)
+  const channels = [channel, '123456789012345682', '123456789012345683']
+  const env = { ...envConfig, ALLOWED_CHANNELS: channels.join(','), DISCORD_SOURCE_POLICY_JSON: JSON.stringify({
+    version: 1, sources: channels.map(channel_id => ({ channel_id, webhook_id: webhook, team_ids: ['ClassA_01'] })),
+  }) }
+  await store.ensureChannels(channels, floor.toString())
+  for (const id of channels.slice(0, 2)) {
+    await store.run('UPDATE discord_cursors SET last_attempt=?, retry_at=? WHERE channel_id=?',
+      '2026-11-04T00:00:00.000Z', Date.now() + 3600_000, id)
+  }
+  await store.run('UPDATE discord_cursors SET last_attempt=? WHERE channel_id=?', '2026-11-04T00:01:00.000Z', channels[2])
+  const requested = []
+  const fetchFn = async url => {
+    const match = new URL(url).pathname.match(/^\/api\/v10\/channels\/(\d+)$/)
+    if (match) { requested.push(match[1]); return Response.json({ id: match[1], guild_id: guild, type: 0, permission_overwrites: [] }) }
+    return history([])(url)
+  }
+  await syncDiscord(store, env, fetchFn)
+  assert.deepEqual(requested, [channels[2]])
+  assert.ok((await store.first('SELECT last_success FROM discord_cursors WHERE channel_id=?', channels[2])).last_success)
+  assert.equal((await store.first('SELECT message_id FROM discord_cursors WHERE channel_id=?', channel)).message_id, floor.toString())
+  for (const id of channels.slice(0, 2)) await store.run('UPDATE discord_cursors SET retry_at=0 WHERE channel_id=?', id)
+  requested.length = 0
+  await syncDiscord(store, env, fetchFn)
+  assert.deepEqual(requested, channels.slice(0, 2))
+})
+
+test('source health distinguishes missing reader credentials from a valid source policy', async t => {
+  const { store } = await setup(t)
+  const result = await discordHealth(store, { ...envConfig, DISCORD_BOT_TOKEN: undefined })
+  assert.equal(result.enabled, true)
+  assert.equal(result.configured, false)
+  assert.equal(result.policy_valid, true)
+  assert.deepEqual(result.missing_settings, ['DISCORD_BOT_TOKEN'])
 })
 
 test('Backend acknowledgements follow durable D1 persistence and enrollment keeps last good snapshot', async t => {

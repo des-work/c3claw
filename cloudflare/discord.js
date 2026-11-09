@@ -23,6 +23,24 @@ export function discordPolicy(env) {
   try { payload = JSON.parse(env.DISCORD_SOURCE_POLICY_JSON) } catch { throw new Error('Invalid Discord source policy JSON') }
   return { channels, sources: parseDiscordSources(payload, channels) }
 }
+
+// Validate each setting independently. A missing token must not imply that a
+// source policy is also missing, or hide a policy error until credentials arrive.
+export function discordConfiguration(env) {
+  const required = ['DISCORD_BOT_TOKEN', 'ALLOWED_CHANNELS', 'DISCORD_SOURCE_POLICY_JSON']
+  const missing = required.filter(name => typeof env[name] !== 'string' || !env[name].trim())
+  let policyValid = false
+  if (!missing.includes('ALLOWED_CHANNELS') && !missing.includes('DISCORD_SOURCE_POLICY_JSON')) {
+    try { discordPolicy(env); policyValid = true } catch { /* Only expose a fixed diagnostic, never config values. */ }
+  }
+  return {
+    configured: missing.length === 0 && policyValid,
+    missing_settings: missing,
+    policy_valid: policyValid,
+    last_error: missing.length ? `Missing Discord settings: ${missing.join(', ')}` :
+      !policyValid ? 'Discord source policy or channel configuration is invalid' : null,
+  }
+}
 export function effectivePermissions(guildId, roles, member, channel) {
   const roleIds = new Set(member.roles)
   let permissions = roles.filter(role => role.id === guildId || roleIds.has(role.id))
@@ -152,7 +170,8 @@ export async function syncDiscord(store, env, fetchFn = fetch) {
   if (global?.retryAt > Date.now()) return
   // More teams can share class telemetry channels. Extra channels rotate fairly.
   const rows = await store.rows(`SELECT * FROM discord_cursors WHERE channel_id IN
-    (SELECT value FROM json_each(?)) ORDER BY last_attempt IS NOT NULL, last_attempt, channel_id LIMIT 2`, JSON.stringify([...channels]))
+    (SELECT value FROM json_each(?)) AND retry_at<=?
+    ORDER BY last_attempt IS NOT NULL, last_attempt, channel_id LIMIT 2`, JSON.stringify([...channels]), Date.now())
   const cache = { guilds: new Map() }
   for (const row of rows) {
     if (row.retry_at > Date.now()) continue
@@ -180,9 +199,9 @@ export async function syncDiscord(store, env, fetchFn = fetch) {
 
 export async function discordHealth(store, env) {
   if (env.TELEMETRY_SOURCE !== 'discord') return { enabled: false }
-  if (!env.DISCORD_BOT_TOKEN) return { enabled: false, configured: false, last_error: 'Discord bot token and source policy are required' }
-  let policy
-  try { policy = discordPolicy(env) } catch { return { enabled: true, configured: false, last_error: 'Discord source policy or channel configuration is invalid' } }
+  const configuration = discordConfiguration(env)
+  if (!configuration.configured) return { enabled: true, ...configuration }
+  const policy = discordPolicy(env)
   const rows = await store.rows('SELECT last_success, last_error, scan_head FROM discord_cursors WHERE channel_id IN (SELECT value FROM json_each(?))',
     JSON.stringify([...policy.channels]))
   const times = rows.filter(row => row.last_success).map(row => Date.parse(row.last_success))

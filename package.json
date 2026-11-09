@@ -17,7 +17,8 @@
     "cloudflare:build": "cf build --mode cloudflare",
     "cloudflare:dev": "cf dev --mode cloudflare",
     "cloudflare:deploy": "cf deploy --mode cloudflare",
-    "test:cloudflare": "node --test cloudflare/runtime.test.js"
+    "test:cloudflare": "node --test cloudflare/runtime.test.js",
+    "telemetry:check": "node scripts/telemetry-preflight.js"
   },
   "engines": {
     "node": "20.x || >=22.23.0"

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { initialCursor, effectivePermissions, discordPolicy } from '../cloudflare/discord.js'
+import { initialCursor, effectivePermissions, discordPolicy, discordConfiguration } from '../cloudflare/discord.js'
 import { topology, requestJson } from '../cloudflare/worker.js'
 
 test('Cloudflare cutover is explicit and webhook policy cannot authorize another team', () => {
@@ -35,4 +35,20 @@ test('bounded API JSON rejects unsupported content, malformed and oversized inpu
   await assert.rejects(requestJson(request('{')), error => error.status === 400)
   await assert.rejects(requestJson(request(JSON.stringify({ details: 'x'.repeat(20_000) }))), error => error.status === 413)
   assert.deepEqual(await requestJson(request('{"team_id":"A"}')), { team_id: 'A' })
+})
+
+test('Discord readiness identifies missing settings without inferring other settings are absent or exposing secrets', () => {
+  const config = { ALLOWED_CHANNELS: '123456789012345678', DISCORD_SOURCE_POLICY_JSON: JSON.stringify({
+    version: 1, sources: [{ channel_id: '123456789012345678', webhook_id: '123456789012345679', team_ids: ['ClassA_01'] }],
+  }) }
+  const missingToken = discordConfiguration(config)
+  assert.deepEqual(missingToken.missing_settings, ['DISCORD_BOT_TOKEN'])
+  assert.equal(missingToken.policy_valid, true)
+  assert.equal(missingToken.configured, false)
+  assert.equal(discordConfiguration({ ...config, DISCORD_BOT_TOKEN: 'private-token' }).configured, true)
+  const invalidPolicy = discordConfiguration({ ...config, DISCORD_BOT_TOKEN: 'private-token', DISCORD_SOURCE_POLICY_JSON: 'PRIVATE_INVALID_INPUT' })
+  assert.equal(invalidPolicy.policy_valid, false)
+  assert.deepEqual(invalidPolicy.missing_settings, [])
+  assert.doesNotMatch(JSON.stringify(invalidPolicy), /private-token|PRIVATE_INVALID_INPUT/)
+  assert.deepEqual(discordConfiguration({}).missing_settings, ['DISCORD_BOT_TOKEN', 'ALLOWED_CHANNELS', 'DISCORD_SOURCE_POLICY_JSON'])
 })
