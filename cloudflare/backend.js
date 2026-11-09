@@ -10,7 +10,10 @@ export async function syncBackend(store, env, configuredTopology, fetchFn = fetc
   // Enrollment snapshots never contain students' identities.
   try {
     const response = await fetchFn(backendUrl(baseUrl, '/api/admin/enrollment/teams/export'), {
-      headers: { 'X-Export-Secret': secret }, signal: AbortSignal.timeout(5_000), redirect: 'error',
+      // 'manual', not 'error': the Workers runtime rejects redirect: 'error'
+      // outright. The !response.ok check below still refuses a 3xx, so the
+      // export secret is never replayed to a redirect target.
+      headers: { 'X-Export-Secret': secret }, signal: AbortSignal.timeout(5_000), redirect: 'manual',
     })
     if (!response.ok) throw new Error(`Enrollment export returned HTTP ${response.status}`)
     const payload = parseEnrollmentSnapshot(await boundedJson(response, 'Enrollment export', 2 * 1024 * 1024))

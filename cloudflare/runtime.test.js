@@ -176,7 +176,10 @@ test('Backend acknowledgements follow durable D1 persistence and enrollment keep
   const env = { TELEMETRY_SOURCE: 'backend', SEMESTER_START_AT: startAt, BACKEND_EXPORT_URL: 'https://backend.example', BACKEND_EXPORT_SECRET: 'export-secret' }
   const fetchFn = async (url, options) => {
     assert.equal(options.headers['X-Export-Secret'], 'export-secret')
-    assert.equal(options.redirect, 'error')
+    // 'manual', not 'error': the Workers runtime rejects 'error' outright. A stub
+    // fetchFn cannot detect that, so tests/worker-runtime-contract.test.js guards
+    // the real source instead of trusting this assertion.
+    assert.equal(options.redirect, 'manual')
     if (url.pathname.includes('/teams/')) return Response.json({ version: 1, teams: [team] })
     if (url.pathname.endsWith('/export')) return Response.json({ events: [exported], has_more: false, pending: 1, head_id: 1 })
     assert.equal((await store.first('SELECT COUNT(*) AS count FROM events')).count, 1)

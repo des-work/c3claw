@@ -25,7 +25,10 @@ export async function syncBackendOnce({ baseUrl, secret, fetchFn = fetch,
     const url = backendUrl(baseUrl, '/api/admin/events/export')
     url.searchParams.set('limit', '500')
     const response = await fetchFn(url, {
-      headers: { 'X-Export-Secret': secret }, signal: AbortSignal.timeout(10_000), redirect: 'error',
+      // 'manual', not 'error': the Workers runtime rejects redirect: 'error'
+      // outright, and this module runs there as well as on the Node server.
+      // The !response.ok check below still refuses a 3xx.
+      headers: { 'X-Export-Secret': secret }, signal: AbortSignal.timeout(10_000), redirect: 'manual',
     })
     if (!response.ok) throw new Error(`Backend export returned HTTP ${response.status}`)
     const batch = await boundedJson(response, 'Backend export')
@@ -55,7 +58,7 @@ export async function syncBackendOnce({ baseUrl, secret, fetchFn = fetch,
         method: 'POST', headers: { 'X-Export-Secret': secret, 'Content-Type': 'application/json' },
         body: JSON.stringify({ event_ids: batch.events.map(item => item.id) }),
         signal: AbortSignal.timeout(10_000),
-        redirect: 'error',
+        redirect: 'manual', // See the export request above.
       })
       if (!acknowledgement.ok) throw new Error(`Backend acknowledgement returned HTTP ${acknowledgement.status}`)
       const highest = batch.events.at(-1).id
