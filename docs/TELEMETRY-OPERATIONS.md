@@ -19,6 +19,78 @@ ingestion. Machine heartbeats are optional for an activity-only launch.
 See [the granular launch plan](TELEMETRY-LAUNCH-PLAN.md) for owners, dependencies,
 individual checks and launch fallbacks. Incomplete tests remain explicitly unverified.
 
+## November 9, 2026 — connected and live
+
+The Discord feed is connected and the collector is succeeding. The November 8 section
+below is retained as history and no longer describes current state.
+
+### Live configuration
+
+| Item | Value |
+| --- | --- |
+| Release | `ebdd6ade09ef…+discord-redirect-manual` |
+| Account / D1 | `8e2b6acf…993894` / `1b405da4-cdc6-4087-8194-295f22f8b74a` |
+| Telemetry channel | `ocrt-telemetry` `1569448846130552922` (Dogpark, non-private) |
+| Webhook | `OCRT Telemetry` `1569449471169790092` |
+| Teams mapped | 18, all real roster teams, one shared webhook |
+| Reader | OCRT Monitor `1492392152481665034`; reads 25 of 76 text channels |
+| Collector | `*/5 * * * *`; first successful runs 21:15:22Z and 21:20:22Z |
+
+`EVENT_API_KEY` was rotated on November 9. Any direct HTTPS publisher needs the new
+value from the owner-only file; the previous key no longer authenticates.
+
+### Daily check
+
+```bash
+curl -s https://claw-and-order.csusb-robotics.workers.dev/api/health | python3 -m json.tool
+```
+
+Healthy means `status: ok`, `problems: []`, `synced_channels` equal to `channels`,
+`failed_channels: 0`, and an `oldest_sync` within the last 15 minutes. The service flags
+its own staleness after 900 seconds, so a stalled collector surfaces without anyone
+watching.
+
+### Publishing an event
+
+Use `scripts/ocrt-publish.py`; see [the publisher guide](OCRT-PUBLISHER.md). A native bot
+message carries no webhook ID and is always rejected, so chat in the channel never
+becomes telemetry. Records missing `tool` or `target` are refused rather than completed
+by guesswork. Always pass `--state`: the receiver keys events on the Discord message ID,
+so a re-post creates a second event and a second count.
+
+### Failure modes
+
+| Symptom in `/api/health` | Means | Action |
+| --- | --- | --- |
+| `discord_not_current`, `failed_channels: 0`, stale `oldest_sync` | The collector is not running | Confirm the Worker still has its `*/5` trigger |
+| `Bot needs effective View Channel and Read Message History` | Channel permissions changed | Restore access for the reader, or use a non-private channel |
+| `Discord read returned HTTP 401` | Reader token revoked or reset | Mint a new token, re-provision the Worker secrets |
+| `Discord read returned HTTP 403` or `404` | Bot removed, or channel deleted | Re-invite the bot, or recreate the channel and webhook |
+| `Discord rate limited` | Too many allowlisted channels | Reduce the allowlist; the collector retries on its own |
+| `Discord synchronization failed; checkpoint retained` | An exception outside the known prefixes | Run `node scripts/diagnose-sync.mjs`, which reproduces the call sequence inside the Workers runtime and prints the raw error |
+| `discord_rejections` climbing | A publisher is using an unmapped webhook or team, or a malformed line | Check the publisher's mapping and format |
+
+### Not monitored
+
+Machine health. No heartbeat producer exists, so every machine stays `unknown` and every
+team shows no inventory. Activity is never evidence of machine health. An empty activity
+feed means nobody published, not that nobody acted.
+
+### Credentials
+
+Reader token, webhook URL, source policy, topology and the rotated event key live in
+owner-only files under `Deliveries/Discord/Private` and
+`Deliveries/Cloudflare-Migration/Private`, mode `0600`. Never commit them, never paste
+them into chat, and never hand the webhook URL to students: it is mapped to all 18 teams,
+so whoever holds it can report as any team.
+
+### Known defects
+
+`cloudflare/backend.js:13` and `shared/backend-sync.js:28,58` still use
+`redirect: 'error'`, which the Workers runtime rejects. Harmless while backend sync is
+disabled; it will fail the same opaque way if enabled. The existing runtime tests cannot
+catch this class of bug because they inject a stub `fetchFn`.
+
 ## Verified November 8, 2026
 
 - Production dashboard API responds, but the live Discord feed has not been connected.
