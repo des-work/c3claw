@@ -35,10 +35,27 @@ export function authorizedDiscordSource(mappings, message, teamId) {
 }
 
 export function parseDiscordTelemetry(content) {
-  if (!content.startsWith(MESSAGE_PREFIX)) return null
-  const parts = content.slice(MESSAGE_PREFIX.length).trim().split('|').map(part => part.trim())
-  if (parts.length < 4 || parts.slice(0, 4).some(part => !part)) return false
-  const [team_id, tool, target, result, ...details] = parts
-  return { team_id, tool, target, result, details: details.join(' | ') }
+  if (content.startsWith(MESSAGE_PREFIX)) {
+    const parts = content.slice(MESSAGE_PREFIX.length).trim().split('|').map(part => part.trim())
+    if (parts.length < 4 || parts.slice(0, 4).some(part => !part)) return false
+    const [team_id, tool, target, result, ...details] = parts
+    return { team_id, tool, target, result, details: details.join(' | ') }
+  }
+  // Labeled multi-line form the deployed agents emit via their own webhook:
+  //   === OCRT REPORT ===
+  //   Team: <id>  / Technique: <tool>  / Target: <ip>  / Result: <r>  / Details: <text>
+  // "Technique" maps to the event's tool field. Operational chatter that does not
+  // open with the report header is not telemetry and returns null (skipped).
+  if (/^===\s*OCRT REPORT/im.test(content)) {
+    const field = label => {
+      const match = content.match(new RegExp(`^${label}\\s*:\\s*(.+?)\\s*$`, 'im'))
+      return match ? match[1].trim() : ''
+    }
+    const team_id = field('Team'), tool = field('Technique'), target = field('Target')
+    const result = field('Result'), details = field('Details')
+    if (!team_id || !tool || !target || !result) return false
+    return { team_id, tool, target, result, details }
+  }
+  return null
 }
 

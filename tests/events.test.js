@@ -14,6 +14,21 @@ test('Discord telemetry retains details and rejects incomplete records', () => {
   assert.equal(parseDiscordTelemetry('unrelated'), null)
 })
 
+test('Discord telemetry accepts the deployed agents’ labeled OCRT REPORT form', () => {
+  // Exact shape captured from a live agent in #hermes-hivemind.
+  const report = '=== OCRT REPORT (synthetic test) ===\nTeam: Kassandra_03\nTechnique: rce\n' +
+    'Target: 10.0.1.1 (synthetic)\nResult: success\nDetails: synthetic finding, no real exploitation'
+  assert.deepEqual(parseDiscordTelemetry(report), {
+    team_id: 'Kassandra_03', tool: 'rce', target: '10.0.1.1 (synthetic)', result: 'success',
+    details: 'synthetic finding, no real exploitation',
+  })
+  // Header present but a required field missing -> malformed (counted), not skipped.
+  assert.equal(parseDiscordTelemetry('=== OCRT REPORT ===\nTeam: K1\nTechnique: rce\nTarget: 1.2.3.4'), false)
+  // Operational chatter on the same webhook is not a report -> skipped.
+  assert.equal(parseDiscordTelemetry('Day 0 init test'), null)
+  assert.equal(parseDiscordTelemetry('CVE check run at 2026-11-10 10:11 PST'), null)
+})
+
 test('event IDs are collision resistant and malformed payloads are rejected', () => {
   const input = { team_id: 'Brown_01', tool: 'Nmap', target: '10.0.1.1', result: 'BLOCKED',
     source_id: 'discord:1234567890123456789' }
