@@ -1,0 +1,10 @@
+#!/bin/sh
+# ocrt — publish one OCRT telemetry line. Secret lives in $OCRT_HOOK, never here.
+# usage: ocrt <team> <technique> <target> <result> [details]
+[ -z "$OCRT_HOOK" ] && { echo "set OCRT_HOOK first"; exit 2; }
+[ $# -lt 4 ] && { echo "usage: ocrt <team> <technique> <target> <result> [details]"; exit 2; }
+curl -s -X POST "$OCRT_HOOK?wait=true" \
+  -H 'Content-Type: application/json' \
+  -H 'User-Agent: DiscordBot (https://github.com/des-work/c3claw, 1.0)' \
+  -d "{\"content\":\"[OCRT] $1 | $2 | $3 | $4 | $5\"}" \
+  -w '\nHTTP %{http_code}\n'
